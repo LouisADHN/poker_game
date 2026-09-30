@@ -23,6 +23,15 @@ public enum Rank {
         this.symbol = symbol;
     }
 
+    public static Rank fromSymbol(String symbol) {
+        for (Rank rank : values()) {
+            if (rank.symbol.equals(symbol)) {
+                return rank;
+            }
+        }
+        throw new IllegalArgumentException("Rang inconnu : " + symbol);
+    }
+
     public int getValue() {
         return value;
     }

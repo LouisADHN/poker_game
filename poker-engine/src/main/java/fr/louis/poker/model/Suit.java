@@ -15,4 +15,13 @@ public enum Suit {
     public String getSymbol() {
         return symbol;
     }
+
+    public static Suit fromSymbol(String symbol) {
+        for (Suit suit : values()) {
+            if (suit.symbol.equals(symbol)) {
+                return suit;
+            }
+        }
+        throw new IllegalArgumentException("Rang inconnu : " + symbol);
+    }
 }
