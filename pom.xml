@@ -4,11 +4,12 @@
   <groupId>fr.louis.poker</groupId>
   <artifactId>poker</artifactId>
   <version>1.0-SNAPSHOT</version>
-  <name>Archetype - poker</name>
+  <name>poker</name>
   <url>http://maven.apache.org</url>
   <packaging>pom</packaging>
   <modules>
     <module>poker-engine</module>
+    <module>poker-server</module>
   </modules>
   <properties>
     <maven.compiler.release>21</maven.compiler.release>

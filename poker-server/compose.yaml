@@ -1,0 +1,9 @@
+services:
+  postgres:
+    image: 'postgres:18'
+    environment:
+      - 'POSTGRES_DB=poker'
+      - 'POSTGRES_PASSWORD=poker'
+      - 'POSTGRES_USER=poker'
+    ports:
+      - '5432'
