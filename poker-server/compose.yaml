@@ -6,4 +6,4 @@ services:
       - 'POSTGRES_PASSWORD=poker'
       - 'POSTGRES_USER=poker'
     ports:
-      - '5432'
+      - '5432:5432'
