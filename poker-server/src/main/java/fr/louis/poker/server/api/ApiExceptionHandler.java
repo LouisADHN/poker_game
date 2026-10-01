@@ -1,5 +1,7 @@
 package fr.louis.poker.server.api;
 
+import fr.louis.poker.server.lobby.LobbyConflictException;
+import fr.louis.poker.server.lobby.TableNotFoundException;
 import fr.louis.poker.server.user.InvalidCredentialsException;
 import fr.louis.poker.server.user.UsernameAlreadyTakenException;
 import org.springframework.http.HttpStatus;
@@ -42,11 +44,35 @@ public class ApiExceptionHandler {
         return problem;
     }
 
-    /** Pseudo ou mot de passe incorrect : 401 Unautorized */
+    /** Pseudo ou mot de passe incorrect : 401 Unauthorized */
     @ExceptionHandler(InvalidCredentialsException.class)
     ProblemDetail handleInvalidCredentials(InvalidCredentialsException e) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
         problem.setTitle("Identifiants invalides");
+        return problem;
+    }
+
+    /** 404 not found */
+    @ExceptionHandler(TableNotFoundException.class)
+    ProblemDetail handleTableNotFound(TableNotFoundException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
+        problem.setTitle("Table introuvable");
+        return problem;
+    }
+
+    /** 409 conflict */
+    @ExceptionHandler(LobbyConflictException.class)
+    ProblemDetail handleLobbyConflict(LobbyConflictException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+        problem.setTitle("Action impossible");
+        return problem;
+    }
+
+    /** 400 bad Request */
+    @ExceptionHandler(IllegalArgumentException.class)
+    ProblemDetail handleInvalidParameters(IllegalArgumentException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+        problem.setTitle("Paramètres invalides");
         return problem;
     }
 }

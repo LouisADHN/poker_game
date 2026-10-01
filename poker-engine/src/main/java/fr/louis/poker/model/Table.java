@@ -6,7 +6,7 @@ import java.util.List;
 
 public class Table {
 
-    private static final int MAX_PLAYER = 10;
+    public static final int MAX_PLAYERS = 10;
 
     /** Les joueurs dans l'ordre des sieges */
     private final List<Player> seats = new ArrayList<>();
@@ -34,7 +34,7 @@ public class Table {
     }
 
     public void addPlayer(Player player) {
-        if (seats.size() >= MAX_PLAYER) {
+        if (seats.size() >= MAX_PLAYERS) {
             throw new IllegalStateException("La table est pleine");
         }
         for (Player seat : seats) {
