@@ -26,7 +26,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**", "/api/ping").permitAll()
+                        .requestMatchers("/api/auth/**", "/api/ping", "/ws", "/ws/**").permitAll()
                         // Indispensable : sinon les erreurs des routes publiques seraient masquées par un 403
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
