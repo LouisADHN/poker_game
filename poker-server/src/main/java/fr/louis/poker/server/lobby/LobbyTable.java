@@ -65,4 +65,16 @@ class LobbyTable {
     TableView toView() {
         return new TableView(id, name, settings, ownerId, status, List.copyOf(seats));
     }
+
+    Long ownerId() {
+        return ownerId;
+    }
+
+    int playerCount() {
+        return seats.size();
+    }
+
+    void markPlaying() {
+        status = TableStatus.PLAYING;
+    }
 }

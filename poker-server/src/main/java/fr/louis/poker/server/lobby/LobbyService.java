@@ -3,10 +3,7 @@ package fr.louis.poker.server.lobby;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Gère les tables du lobby, en mémoire.
@@ -124,5 +121,33 @@ public class LobbyService {
         tables.clear();
         tableByUser.clear();
         nextId = 1;
+    }
+
+    public synchronized TableView markPlaying(long tableId, Long userId) {
+        LobbyTable table = find(tableId);
+        if (!userId.equals(table.ownerId())) {
+            throw new LobbyConflictException("Seul le créateur de la table peut lancer la partie");
+        }
+        if (table.toView().status() == TableStatus.PLAYING) {
+            throw new LobbyConflictException("La partie a déjà commencé");
+        }
+        if (table.playerCount() < 2) {
+            throw new LobbyConflictException("Il faut au moins 2 joueurs pour lancer la partie");
+        }
+
+        table.markPlaying();
+        publish(table);
+        return table.toView(); // construite APRÈS la modification : statut PLAYING
+    }
+
+    public synchronized void endGame(long tableId) {
+        LobbyTable table = tables.remove(tableId);
+        if (table == null) {
+            return; // déjà fermée
+        }
+        for (Seat seat : table.toView().players()) {
+            tableByUser.remove(seat.userId());
+        }
+        publish(table); // la table n'est plus dans la map : seule la liste est diffusée
     }
 }
