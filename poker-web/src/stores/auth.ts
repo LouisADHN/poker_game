@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { api } from '@/api/http'
+import { disconnect } from '@/api/stomp'
 import type { LoginResponse, User } from '@/api/types'
 
 const TOKEN_KEY = 'poker.token'
@@ -43,6 +44,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function logout(): void {
+    disconnect()
     token.value = null
     expiresAt.value = null
     user.value = null

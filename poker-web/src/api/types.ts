@@ -25,3 +25,42 @@ export interface ProblemDetail {
   /** Erreurs de validation, champ par champ : { username: "Le pseudo doit…" } */
   errors?: Record<string, string>
 }
+
+// ------------------------------------------------------------------
+// Lobby
+
+/** Type littéral : l'équivalent de l'enum Java TableStatus. */
+export type TableStatus = 'WAITING' | 'PLAYING'
+
+/** Seat côté serveur : un joueur assis à une table. */
+export interface Seat {
+  userId: number
+  username: string
+}
+
+/** TableSettings côté serveur. */
+export interface TableSettings {
+  smallBlind: number
+  bigBlind: number
+  startingChips: number
+  maxPlayers: number
+}
+
+/** TableView côté serveur. */
+export interface TableView {
+  id: number
+  name: string
+  settings: TableSettings
+  ownerId: number
+  status: TableStatus
+  players: Seat[]
+}
+
+/** CreateTableRequest côté serveur : les paramètres à plat, plus le nom. */
+export interface CreateTableRequest {
+  name: string
+  smallBlind: number
+  bigBlind: number
+  startingChips: number
+  maxPlayers: number
+}
