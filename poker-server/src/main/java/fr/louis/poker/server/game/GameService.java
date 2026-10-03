@@ -4,6 +4,7 @@ import fr.louis.poker.action.Action;
 import fr.louis.poker.server.lobby.LobbyConflictException;
 import fr.louis.poker.server.lobby.LobbyService;
 import fr.louis.poker.server.lobby.TableView;
+import fr.louis.poker.server.stats.GameResultService;
 import jakarta.annotation.PreDestroy;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -26,11 +27,16 @@ public class GameService {
     private final LobbyService lobbyService;
     private final SimpMessagingTemplate messaging;
     private final GameProperties properties;
+    private final GameResultService gameResultService;
 
-    public GameService(LobbyService lobbyService, SimpMessagingTemplate messaging, GameProperties properties) {
+    public GameService(LobbyService lobbyService,
+                       SimpMessagingTemplate messaging,
+                       GameProperties properties,
+                       GameResultService gameResultService) {
         this.lobbyService = lobbyService;
         this.messaging = messaging;
         this.properties = properties;
+        this.gameResultService = gameResultService;
     }
 
     /** Lance la partie d'une table. Seul le créateur de la table peut le faire. */
@@ -40,10 +46,12 @@ public class GameService {
 
         GameSession session = new GameSession(
                 tableId,
+                table.name(),
                 table.players(),
                 table.settings(),
                 properties,
                 messaging,
+                gameResultService::record, // enregistre le résultat si la partie va à son terme
                 () -> finish(tableId));
 
         // Enregistrée AVANT le démarrage, pour accepter les actions dès le premier tour
