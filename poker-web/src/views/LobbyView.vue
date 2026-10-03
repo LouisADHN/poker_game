@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { ApiError } from '@/api/http'
-import type { TableView } from '@/api/types'
-import { useAuthStore } from '@/stores/auth'
-import { useLobbyStore } from '@/stores/lobby'
+import {onMounted, onUnmounted, ref, watch} from 'vue'
+import {useRouter} from 'vue-router'
+import {ApiError} from '@/api/http'
+import type {TableView} from '@/api/types'
+import {useAuthStore} from '@/stores/auth'
+import {useLobbyStore} from '@/stores/lobby'
 import CreateTableForm from '@/components/CreateTableForm.vue'
 
 const auth = useAuthStore()
@@ -56,8 +56,18 @@ function isOwner(table: TableView): boolean {
 async function logout() {
   lobby.stopLive()
   auth.logout()
-  await router.push({ name: 'login' })
+  await router.push({name: 'login'})
 }
+
+// Quand ma table passe en jeu, j'y vais : ça fonctionne pour tous les joueurs assis
+watch(
+  () => lobby.myTable?.status,
+  (status) => {
+    if (status === 'PLAYING' && lobby.myTable) {
+      router.push({ name: 'game', params: { id: lobby.myTable.id } })
+    }
+  },
+)
 </script>
 
 <template>
@@ -80,13 +90,18 @@ async function logout() {
       <ul>
         <li v-for="player in lobby.myTable.players" :key="player.userId">{{ player.username }}</li>
       </ul>
-      <button type="button" @click="run(() => lobby.leave(lobby.myTable!.id))">Quitter la table</button>
+      <button
+        v-if="isOwner(lobby.myTable) && lobby.myTable.status === 'WAITING' && lobby.myTable.players.length >=2"
+        type="button" @click="run(() => lobby.start(lobby.myTable!.id))">Lancer la partie
+      </button>
+      <button type="button" @click="run(() => lobby.leave(lobby.myTable!.id))">Quitter la table
+      </button>
     </section>
 
     <!-- Sinon : le formulaire de création -->
     <section v-else aria-labelledby="create-title">
       <h2 id="create-title">Créer une table</h2>
-      <CreateTableForm />
+      <CreateTableForm/>
     </section>
 
     <!-- La liste des tables -->

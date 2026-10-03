@@ -52,10 +52,14 @@ export const useLobbyStore = defineStore('lobby', () => {
     await load()
   }
 
+  async function start(tableId: number): Promise<void> {
+    await api<void>(`/api/tables/${tableId}/start`, { method: 'POST' })
+  }
+
   async function leave(tableId: number): Promise<void> {
     await api<void>(`/api/tables/${tableId}/leave`, { method: 'POST' })
     await load()
   }
 
-  return { tables, myTable, load, startLive, stopLive, create, join, leave }
+  return { tables, myTable, load, startLive, stopLive, create, join, start, leave }
 })

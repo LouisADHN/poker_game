@@ -39,7 +39,7 @@ public class GameMessages {
           case GameEvent.BlindPosted(String player, int amount) ->
                   new GameMessage("BLIND_POSTED", Map.of(
                           "player", player,
-                          "ammout", amount));
+                          "amount", amount));
             case GameEvent.HoleCardsDealt(String player, List<Card> holeCards) ->
                     new GameMessage("HOLE_CARDS", Map.of(
                             "player", player,

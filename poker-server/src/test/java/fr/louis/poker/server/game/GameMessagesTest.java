@@ -146,5 +146,13 @@ class GameMessagesTest {
                 assertEquals(original, received.toAction(), "Échec de l'aller-retour pour " + original);
             }
         }
+
+        @Test
+        @DisplayName("BlindPosted devient BLIND_POSTED avec le joueur et le montant")
+        void blindPosted() {
+            GameMessage message = GameMessages.fromEvent(new GameEvent.BlindPosted("Louis", 10));
+            assertEquals("BLIND_POSTED", message.type());
+            assertEquals(Map.of("player", "Louis", "amount", 10), message.data());
+        }
     }
 }

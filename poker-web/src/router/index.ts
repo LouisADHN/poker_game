@@ -33,6 +33,12 @@ const router = createRouter({
       meta: { guestOnly: true },
     },
     {
+      path: '/tables/:id',
+      name: 'game',
+      component: () => import('@/views/GameTableView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       // Toute adresse inconnue renvoie au lobby
       path: '/:pathMatch(.*)*',
       redirect: { name: 'lobby' },

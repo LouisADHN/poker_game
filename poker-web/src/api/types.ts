@@ -64,3 +64,73 @@ export interface CreateTableRequest {
   startingChips: number
   maxPlayers: number
 }
+
+// ------------------------------------------------------------------
+
+export type Street = 'PREFLOP' | 'FLOP' | 'TURN' | 'RIVER'
+
+/** PlayerStatus côté moteur. */
+export type PlayerStatus = 'ACTIVE' | 'FOLDED' | 'ALL_IN' | 'OUT'
+
+export type ActionType = 'FOLD' | 'CHECK' | 'CALL' | 'BET' | 'RAISE' | 'ALL_IN'
+
+/** Une action, envoyée au serveur ou reçue de lui. "total" n'existe que pour BET et RAISE. */
+export interface ActionPayload {
+  type: ActionType
+  total?: number
+}
+
+/** LegalActions côté moteur. */
+export interface LegalActions {
+  canCheck: boolean
+  toCall: number
+  canRaise: boolean
+  minRaiseTo: number
+  maxRaiseTo: number
+}
+
+/** OpponentView côté moteur. */
+export interface OpponentView {
+  name: string
+  chips: number
+  status: PlayerStatus
+  streetBet: number
+}
+
+/** Contenu du message YOUR_TURN : tout ce que le joueur a le droit de savoir pour décider. */
+export interface YourTurn {
+  street: Street
+  holeCards: string[]
+  board: string[]
+  chips: number
+  pot: number
+  currentBet: number
+  myStreetBet: number
+  opponents: OpponentView[]
+  legalActions: LegalActions
+}
+
+export interface Standing {
+  player: string
+  chips: number
+}
+
+/**
+ * Union discriminée de tous les messages de partie : le champ "type" détermine la forme de "data".
+ * C'est l'équivalent de la sealed interface GameEvent côté Java.
+ */
+export type GameMessage =
+  | { type: 'HAND_STARTED'; data: { handNumber: number; dealer: string } }
+  | { type: 'BLIND_POSTED'; data: { player: string; amount: number } }
+  | { type: 'HOLE_CARDS'; data: { player: string; cards: string[] } }
+  | { type: 'BOARD'; data: { street: Street; board: string[] } }
+  | {
+  type: 'PLAYER_ACTED'
+  data: { player: string; action: ActionPayload; streetBet: number; chipsLeft: number }
+}
+  | { type: 'HAND_REVEALED'; data: { player: string; cards: string[]; category: string } }
+  | { type: 'POT_WON'; data: { player: string; amount: number } }
+  | { type: 'HAND_ENDED'; data: { handNumber: number } }
+  | { type: 'YOUR_TURN'; data: YourTurn }
+  | { type: 'GAME_OVER'; data: { standings: Standing[] } }
+  | { type: 'ERROR' | 'GAME_ERROR'; data: { message: string } }
