@@ -13,7 +13,6 @@ const SUIT_NAMES: Record<string, string> = { s: 'pique', h: 'cœur', d: 'carreau
 const RANK_NAMES: Record<string, string> = { A: 'As', K: 'Roi', Q: 'Dame', J: 'Valet', T: '10' }
 
 // Étape 1 : découper "As" en "A" et "s".
-// props.card peut être undefined : ?. évite l'erreur, et ?? '' donne un texte vide à la place.
 const rankCode = computed(() => props.card?.charAt(0) ?? '')
 const suitCode = computed(() => props.card?.charAt(1) ?? '')
 
@@ -43,30 +42,42 @@ const label = computed(() => {
   </span>
 </template>
 
-<!-- scoped : ce style ne s'applique qu'à ce composant -->
 <style scoped>
+/*
+  La taille vient de la variable --card-w, définie par le parent
+  (2.8rem par défaut) : la même carte peut être grande au centre de la table,
+  et plus petite devant un adversaire.
+*/
 .playing-card {
+  --w: var(--card-w, 2.8rem);
+
   display: inline-flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 2.8rem;
-  height: 4rem;
+  width: var(--w);
+  height: calc(var(--w) * 1.43); /* proportions d'une vraie carte */
   margin: 0.15rem;
-  border: 1px solid #999;
-  border-radius: 0.35rem;
-  background: #fff;
-  color: #111;
-  font-weight: bold;
-  font-size: 1.1rem;
-  line-height: 1.1;
+  border-radius: calc(var(--w) * 0.12);
+  background: var(--card);
+  color: var(--card-black);
+  font-family: var(--font-display);
+  font-size: calc(var(--w) * 0.4);
+  font-weight: 700;
+  line-height: 1.05;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.35);
 }
 
 .red {
-  color: #c0392b;
+  color: var(--card-red);
 }
 
+/* Le dos : un motif en losanges laiton sur fond bois, avec une marge ivoire */
 .back {
-  background: repeating-linear-gradient(45deg, #1e4f9c, #1e4f9c 6px, #2a63bd 6px, #2a63bd 12px);
+  border: calc(var(--w) * 0.07) solid var(--card);
+  background:
+    repeating-linear-gradient(45deg, transparent 0 5px, rgb(212 175 90 / 0.45) 5px 6px),
+    repeating-linear-gradient(-45deg, transparent 0 5px, rgb(212 175 90 / 0.45) 5px 6px),
+    var(--rail);
 }
 </style>

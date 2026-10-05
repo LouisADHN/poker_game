@@ -18,7 +18,8 @@ export const useLobbyStore = defineStore('lobby', () => {
 
   /** La table où l'utilisateur connecté est assis, ou null. Recalculée dès que la liste change. */
   const myTable = computed<TableView | null>(
-    () => tables.value.find((table) => table.players.some((p) => p.userId === auth.user?.id)) ?? null,
+    () =>
+      tables.value.find((table) => table.players.some((p) => p.userId === auth.user?.id)) ?? null,
   )
 
   /** Charge la liste en HTTP. */

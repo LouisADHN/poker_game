@@ -26,8 +26,7 @@ export interface PlayerState {
   category: string | null
 }
 
-/** Doit correspondre à poker.game.turn-timeout côté serveur. */
-const TURN_SECONDS = 30
+export const TURN_SECONDS = 30
 
 const CATEGORY_LABELS: Record<string, string> = {
   HIGH_CARD: 'Carte haute',

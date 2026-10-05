@@ -39,6 +39,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/leaderboard',
+      name: 'leaderboard',
+      component: () => import('@/views/LeaderboardView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       // Toute adresse inconnue renvoie au lobby
       path: '/:pathMatch(.*)*',
       redirect: { name: 'lobby' },

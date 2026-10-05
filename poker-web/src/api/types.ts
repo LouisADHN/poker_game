@@ -115,6 +115,16 @@ export interface Standing {
   chips: number
 }
 
+/** PlayerStats côté serveur. */
+export interface PlayerStats {
+  username: string
+  gamesPlayed: number
+  wins: number
+  handsPlayed: number
+  handsWon: number
+  winRate: number
+}
+
 /**
  * Union discriminée de tous les messages de partie : le champ "type" détermine la forme de "data".
  * C'est l'équivalent de la sealed interface GameEvent côté Java.
@@ -125,9 +135,9 @@ export type GameMessage =
   | { type: 'HOLE_CARDS'; data: { player: string; cards: string[] } }
   | { type: 'BOARD'; data: { street: Street; board: string[] } }
   | {
-  type: 'PLAYER_ACTED'
-  data: { player: string; action: ActionPayload; streetBet: number; chipsLeft: number }
-}
+      type: 'PLAYER_ACTED'
+      data: { player: string; action: ActionPayload; streetBet: number; chipsLeft: number }
+    }
   | { type: 'HAND_REVEALED'; data: { player: string; cards: string[]; category: string } }
   | { type: 'POT_WON'; data: { player: string; amount: number } }
   | { type: 'HAND_ENDED'; data: { handNumber: number } }

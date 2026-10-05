@@ -2,10 +2,10 @@
 // Le code de cette balise s'exécute une fois, à la création de la page.
 // Toutes les variables et fonctions déclarées ici sont utilisables dans le template.
 
-import {ref} from 'vue'
-import {useRoute, useRouter} from 'vue-router'
-import {useAuthStore} from '@/stores/auth'
-import {ApiError} from '@/api/http'
+import { ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import { ApiError } from '@/api/http'
 
 // --- Les outils dont la page a besoin
 const auth = useAuthStore() // l'état de connexion partagé (le store Pinia)
@@ -26,7 +26,7 @@ async function submit() {
   fieldErrors.value = {}
 
   if (password.value !== passwordConfirm.value) {
-    fieldErrors.value = {password: 'Les mots de passe ne correspondent pas.'}
+    fieldErrors.value = { password: 'Les mots de passe ne correspondent pas.' }
     return
   }
 
@@ -41,7 +41,7 @@ async function submit() {
     // le typeof vérifie que c'est bien un texte.
     // Le startsWith('/') empêche de rediriger vers un autre site
     // (une faille classique appelée "redirection ouverte").
-    await router.push({name: 'lobby'})
+    await router.push({ name: 'lobby' })
   } catch (e) {
     // e peut être n'importe quoi : instanceof vérifie qu'il s'agit d'une erreur de l'API
     if (e instanceof ApiError) {
@@ -68,19 +68,30 @@ async function submit() {
 
       <label for="username">Pseudo</label>
       <!-- v-model relie le champ à la variable dans les deux sens ; .trim retire les espaces -->
-      <input id="username" v-model.trim="username" type="text" autocomplete="username" required/>
+      <input id="username" v-model.trim="username" type="text" autocomplete="username" required />
       <p v-if="fieldErrors.username" class="field-error">{{ fieldErrors.username }}</p>
 
       <label for="password">Mot de passe</label>
-      <input id="password" v-model="password" type="password" autocomplete="new-password" required/>
+      <input
+        id="password"
+        v-model="password"
+        type="password"
+        autocomplete="new-password"
+        required
+      />
       <p v-if="fieldErrors.password" class="field-error">{{ fieldErrors.password }}</p>
 
       <label for="passwordConfirm">Confirmer le mot de passe</label>
-      <input id="passwordConfirm" v-model="passwordConfirm" type="password"
-             autocomplete="new-password" required/>
-      <p v-if="fieldErrors.passwordConfirm" class="field-error">{{
-          fieldErrors.passwordConfirm
-        }}</p>
+      <input
+        id="passwordConfirm"
+        v-model="passwordConfirm"
+        type="password"
+        autocomplete="new-password"
+        required
+      />
+      <p v-if="fieldErrors.passwordConfirm" class="field-error">
+        {{ fieldErrors.passwordConfirm }}
+      </p>
 
       <!-- :disabled est lié à la variable loading : bouton grisé pendant l'appel -->
       <button type="submit" :disabled="loading">

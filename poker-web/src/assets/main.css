@@ -1,0 +1,288 @@
+/* ==================================================================
+   Feuille de style globale
+   Thème : une salle de jeu le soir. Le tapis est l'élément fort,
+   tout le reste reste sobre pour ne pas lui faire concurrence.
+   ================================================================== */
+
+/* ------------------------------------------------------------------
+   Variables : chaque valeur n'est définie qu'une fois
+   ------------------------------------------------------------------ */
+:root {
+  /* Salle */
+  --ink: #1c2433; /* fond de l'application */
+  --ink-sunken: #161d2a; /* champs de saisie */
+  --ink-raised: #26303f; /* panneaux, lignes de liste */
+  --line: #3a4558; /* bordures */
+
+  /* Texte */
+  --paper: #ede7d9; /* texte principal */
+  --muted: #a9b1bf; /* texte secondaire */
+
+  /* Table de jeu */
+  --felt: #1f5e4a;
+  --felt-dark: #174a3a;
+  --rail: #5a3a22;
+
+  /* Accents */
+  --brass: #d4af5a; /* boutons principaux, focus, liens */
+  --danger: #e27064; /* erreurs */
+
+  /* Cartes */
+  --card: #f8f4ea;
+  --card-red: #b3261e;
+  --card-black: #1c2433;
+
+  /* Polices */
+  --font-display: 'Bricolage Grotesque Variable', 'Arial Narrow', sans-serif;
+  --font-body: 'Atkinson Hyperlegible', system-ui, sans-serif;
+
+  /* Espacements (multiples de 0,25rem) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+
+  /* Arrondis : petits pour les contrôles, moyens pour les panneaux */
+  --radius-s: 6px;
+  --radius-m: 12px;
+  --app-bar-height: 4rem;
+
+  color-scheme: dark;
+}
+
+/* ------------------------------------------------------------------
+   Base
+   ------------------------------------------------------------------ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-body);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+h1 {
+  font-size: clamp(1.9rem, 4vw, 2.6rem);
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-size: 1.35rem;
+}
+
+p {
+  margin: 0 0 var(--space-3);
+}
+
+a {
+  color: var(--brass);
+  text-underline-offset: 0.2em;
+}
+
+/* Contour visible pour la navigation au clavier, sur tous les éléments */
+:focus-visible {
+  outline: 3px solid var(--brass);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------
+   Mise en page des pages
+   ------------------------------------------------------------------ */
+main {
+  width: min(100% - 2rem, 64rem);
+  margin-inline: auto;
+  padding-block: var(--space-8) var(--space-12);
+}
+
+main > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+main > section + section {
+  margin-top: var(--space-8);
+}
+
+/* Pages de connexion et d'inscription : une colonne étroite */
+main.auth-page {
+  width: min(100% - 2rem, 26rem);
+  padding-top: var(--space-12);
+}
+
+/* ------------------------------------------------------------------
+   Formulaires
+   ------------------------------------------------------------------ */
+form {
+  display: grid;
+  gap: var(--space-2);
+}
+
+label {
+  margin-top: var(--space-2);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+input[type='text'],
+input[type='password'],
+input[type='number'] {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--ink-sunken);
+  color: var(--paper);
+  font: inherit;
+}
+
+input:hover {
+  border-color: var(--muted);
+}
+
+input[type='range'] {
+  accent-color: var(--brass);
+}
+
+/* ------------------------------------------------------------------
+   Boutons
+   Hauteur minimale de 44px : une cible confortable au doigt
+   ------------------------------------------------------------------ */
+button {
+  min-height: 2.75rem;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--ink-raised);
+  color: var(--paper);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Bouton principal : l'action attendue sur la page */
+button[type='submit'],
+button.primary {
+  border-color: var(--brass);
+  background: var(--brass);
+  color: var(--ink);
+}
+
+button[type='submit']:hover:not(:disabled),
+button.primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+form button[type='submit'] {
+  margin-top: var(--space-4);
+}
+
+/* ------------------------------------------------------------------
+   Messages
+   ------------------------------------------------------------------ */
+.error {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-s);
+  background: rgb(226 112 100 / 0.1);
+  color: var(--danger);
+}
+
+.field-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+/* ------------------------------------------------------------------
+   Tableaux
+   ------------------------------------------------------------------ */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums; /* chiffres de même largeur : colonnes alignées */
+}
+
+th,
+td {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+thead th {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+tbody th {
+  font-family: var(--font-display);
+}
+
+tr.me {
+  background: rgb(212 175 90 / 0.12);
+}
+
+/* Sur un écran étroit, le tableau défile horizontalement au lieu de déborder */
+@media (max-width: 40rem) {
+  table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Utilitaires
+   ------------------------------------------------------------------ */
+
+/* Masqué à l'écran, mais lu par les lecteurs d'écran */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Respecte le réglage "réduire les animations" du système */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

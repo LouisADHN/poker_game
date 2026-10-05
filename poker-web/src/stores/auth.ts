@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { api } from '@/api/http'
 import { disconnect } from '@/api/stomp'
 import type { LoginResponse, User } from '@/api/types'
+import { api, ApiError } from '@/api/http'
 
 const TOKEN_KEY = 'poker.token'
 const EXPIRES_KEY = 'poker.expiresAt'
@@ -23,7 +23,9 @@ export const useAuthStore = defineStore('auth', () => {
    * un computed garderait en cache un résultat devenu faux.
    */
   function isAuthenticated(): boolean {
-    return token.value !== null && expiresAt.value !== null && new Date(expiresAt.value) > new Date()
+    return (
+      token.value !== null && expiresAt.value !== null && new Date(expiresAt.value) > new Date()
+    )
   }
 
   async function login(username: string, password: string): Promise<void> {
@@ -62,7 +64,23 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem(USER_KEY, JSON.stringify(response.user))
   }
 
-  return { token, user, isAuthenticated, login, register, logout }
+  /** Vérifie auprès du serveur que le compte existe toujours ; sinon, déconnecte. */
+  async function verifySession(): Promise<void> {
+    if (!isAuthenticated()) {
+      return
+    }
+    try {
+      user.value = await api<User>('/api/users/me')
+      localStorage.setItem(USER_KEY, JSON.stringify(user.value))
+    } catch (e) {
+      // 404 : le compte a disparu (base réinitialisée…). Le 401 est déjà géré par http.ts.
+      if (e instanceof ApiError && e.status === 404) {
+        logout()
+      }
+    }
+  }
+
+  return { token, user, isAuthenticated, login, register, logout, verifySession }
 })
 
 function readStoredUser(): User | null {

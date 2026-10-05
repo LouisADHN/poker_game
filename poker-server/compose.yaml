@@ -7,3 +7,8 @@ services:
       - 'POSTGRES_USER=poker'
     ports:
       - '5432:5432'
+    volumes:
+      - poker-data:/var/lib/postgresql
+
+volumes:
+  poker-data:
