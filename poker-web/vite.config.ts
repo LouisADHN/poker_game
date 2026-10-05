@@ -24,4 +24,8 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    outDir: '../poker-server/src/main/resources/static',
+    emptyOutDir: true,
+  },
 })

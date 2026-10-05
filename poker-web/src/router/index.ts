@@ -8,6 +8,7 @@ declare module 'vue-router' {
     requiresAuth?: boolean
     /** Page réservée aux visiteurs (connexion, inscription) */
     guestOnly?: boolean
+    title?: string
   }
 }
 
@@ -18,36 +19,37 @@ const router = createRouter({
       path: '/',
       name: 'lobby',
       component: () => import('@/views/LobbyView.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, title: 'Lobby' },
     },
     {
       path: '/login',
       name: 'login',
       component: () => import('@/views/LoginView.vue'),
-      meta: { guestOnly: true },
+      meta: { guestOnly: true, title: 'Connexion' },
     },
     {
       path: '/register',
       name: 'register',
       component: () => import('@/views/RegisterView.vue'),
-      meta: { guestOnly: true },
+      meta: { guestOnly: true, title: 'Inscription' },
     },
     {
       path: '/tables/:id',
       name: 'game',
       component: () => import('@/views/GameTableView.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, title: 'Partie en cours' },
     },
     {
       path: '/leaderboard',
       name: 'leaderboard',
       component: () => import('@/views/LeaderboardView.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, title: 'Classement' },
     },
     {
       // Toute adresse inconnue renvoie au lobby
       path: '/:pathMatch(.*)*',
       redirect: { name: 'lobby' },
+      meta: { title: 'Lobby'}
     },
   ],
 })
@@ -63,6 +65,11 @@ router.beforeEach((to) => {
   if (to.meta.guestOnly && auth.isAuthenticated()) {
     return { name: 'lobby' }
   }
+})
+
+/** Après chaque changement de page : met à jour le titre de l'onglet */
+router.afterEach((to) => {
+  document.title = to.meta.title ? `${to.meta.title} · Tapis vert` : 'Tapis vert'
 })
 
 export default router

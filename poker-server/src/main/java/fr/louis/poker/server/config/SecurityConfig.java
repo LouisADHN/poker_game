@@ -12,8 +12,11 @@ import org.springframework.security.web.SecurityFilterChain;
 
 /**
  * Configuration de la sécurité HTTP.
- * Étape 6b-2 : seules l'inscription, le ping et la page d'erreur sont publiques.
- * L'authentification par jeton JWT sera ajoutée à l'étape 6b-3.
+ *
+ * - L'API (/api/**) exige un jeton JWT, sauf l'authentification et le ping.
+ * - Tout le reste est public : les fichiers de l'interface Vue (qui ne contiennent
+ *   aucune donnée), l'ouverture du WebSocket (authentifié ensuite par la trame CONNECT)
+ *   et la page d'erreur.
  */
 @Configuration
 public class SecurityConfig {
@@ -24,12 +27,13 @@ public class SecurityConfig {
                 // API sans état, appelée en JSON : pas de session ni de protection CSRF par formulaire
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // Vérifie le jeton JWT de l'en-tête Authorization
                 .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**", "/api/ping", "/ws", "/ws/**").permitAll()
-                        // Indispensable : sinon les erreurs des routes publiques seraient masquées par un 403
-                        .requestMatchers("/error").permitAll()
-                        .anyRequest().authenticated()
+                        .requestMatchers("/api/auth/**", "/api/ping").permitAll()
+                        .requestMatchers("/api/**").authenticated()
+                        // Interface Vue, WebSocket, page d'erreur
+                        .anyRequest().permitAll()
                 );
         return http.build();
     }
