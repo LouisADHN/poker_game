@@ -1,0 +1,18 @@
+# Fichiers à NE PAS envoyer à Docker lors de la construction de l'image.
+# Moins de fichiers = construction plus rapide, et pas de fichiers locaux périmés dans l'image.
+
+# Git et IntelliJ
+.git
+.idea
+**/*.iml
+
+# Résultats de compilation (reconstruits dans l'image)
+**/target
+**/node_modules
+poker-web/dist
+
+# Front compilé localement : l'image le recompile à l'étape "front"
+poker-server/src/main/resources/static
+
+# Fichiers propres à Docker et à l'environnement local
+**/.env
