@@ -1,0 +1,9 @@
+# Fins de ligne : Git stocke tous les fichiers texte avec des fins de ligne Linux (LF)
+* text=auto
+
+# Scripts Linux : toujours LF, même sur une copie de travail Windows
+mvnw text eol=lf
+*.sh text eol=lf
+
+# Scripts Windows : toujours CRLF
+*.cmd text eol=crlf
