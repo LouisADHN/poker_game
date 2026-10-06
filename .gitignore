@@ -3,6 +3,7 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 poker-server/src/main/resources/static/
+.env
 
 ### IntelliJ IDEA ###
 .idea/

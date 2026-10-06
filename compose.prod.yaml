@@ -1,0 +1,46 @@
+# ==================================================================
+# Lancement en production : l'application et sa base de données.
+#
+#   docker compose -f compose.prod.yaml up -d --build
+#
+# Les secrets sont lus dans le fichier .env (à créer à partir de .env.example).
+# ==================================================================
+
+services:
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: poker
+      POSTGRES_USER: poker
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Définis POSTGRES_PASSWORD dans le fichier .env}
+    volumes:
+      - poker-prod-data:/var/lib/postgresql
+    # Aucune section "ports" : la base n'est accessible qu'aux autres conteneurs,
+    # jamais depuis Internet
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U poker -d poker']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    image: poker-game
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy # attend que la base soit prête avant de démarrer
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # "db" est le nom du service ci-dessus : Docker le résout en adresse réseau
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/poker
+      SPRING_DATASOURCE_USERNAME: poker
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      POKER_JWT_SECRET: ${POKER_JWT_SECRET:?Définis POKER_JWT_SECRET dans le fichier .env}
+      POKER_ALLOWED_ORIGINS: ${POKER_ALLOWED_ORIGINS:-http://localhost:8080}
+    ports:
+      - '8080:8080'
+
+volumes:
+  poker-prod-data:

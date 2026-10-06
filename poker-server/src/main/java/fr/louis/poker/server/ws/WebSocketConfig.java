@@ -1,5 +1,6 @@
 package fr.louis.poker.server.ws;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
@@ -20,16 +21,19 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final JwtStompInterceptor jwtStompInterceptor;
+    private final String[] allowedOrigins;
 
-    public WebSocketConfig(JwtStompInterceptor jwtStompInterceptor) {
+    public WebSocketConfig(JwtStompInterceptor jwtStompInterceptor,
+                           @Value("${poker.allowed-origins}") String[] allowedOrigins) {
         this.jwtStompInterceptor = jwtStompInterceptor;
+        this.allowedOrigins = allowedOrigins;
     }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         // Adresse d'ouverture de la connexion : ws://localhost:8080/ws
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("http://localhost:*");
+                .setAllowedOriginPatterns(allowedOrigins);
     }
 
     @Override
