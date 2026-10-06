@@ -3,14 +3,13 @@
 // Toutes les variables et fonctions déclarées ici sont utilisables dans le template.
 
 import { ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ApiError } from '@/api/http'
 
 // --- Les outils dont la page a besoin
 const auth = useAuthStore() // l'état de connexion partagé (le store Pinia)
 const router = useRouter() // pour changer de page
-const route = useRoute() // la page actuelle, avec ses paramètres d'URL
 
 // --- L'état du formulaire (réactif : l'affichage suit automatiquement)
 const username = ref('') // type déduit : string
