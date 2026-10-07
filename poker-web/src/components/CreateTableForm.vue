@@ -57,7 +57,6 @@ async function submit() {
     <input id="table-name" v-model.trim="name" type="text" maxlength="30" required />
     <p v-if="fieldErrors.name" class="field-error">{{ fieldErrors.name }}</p>
 
-    <!-- v-model.number : convertit la saisie en nombre (un input renvoie toujours du texte) -->
     <label for="small-blind">Small blind</label>
     <input id="small-blind" v-model.number="smallBlind" type="number" min="1" required />
     <p v-if="fieldErrors.smallBlind" class="field-error">{{ fieldErrors.smallBlind }}</p>

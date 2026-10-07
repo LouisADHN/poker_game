@@ -12,7 +12,6 @@ const percent = new Intl.NumberFormat('fr-FR', { style: 'percent', maximumFracti
 </script>
 
 <template>
-  <!-- dl : une liste de paires "libellé : valeur" ; dt = libellé, dd = valeur -->
   <dl class="stats-card">
     <div class="stat">
       <dt>Parties jouées</dt>

@@ -29,13 +29,14 @@ const label = computed(() => {
   const rankName = RANK_NAMES[rankCode.value] ?? rankCode.value
   return `${rankName} de ${SUIT_NAMES[suitCode.value]}`
 })
+// Template : deux éléments exclusifs (v-if / v-else), donc un seul élément racine.
+// Ne pas mettre de commentaire HTML à la racine du template : il compterait comme
+// un nœud de plus, et le composant deviendrait un fragment.
+// role="img" + aria-label font lire "As de pique" aux lecteurs d'écran, au lieu de "A pique".
 </script>
 
 <template>
-  <!-- Le dos de la carte -->
   <span v-if="hidden || !card" class="playing-card back" role="img" :aria-label="label"></span>
-
-  <!-- La face : role="img" + aria-label font lire "As de pique" au lieu de "A pique" -->
   <span v-else class="playing-card" :class="{ red: isRed }" role="img" :aria-label="label">
     <span class="rank" aria-hidden="true">{{ rank }}</span>
     <span class="suit" aria-hidden="true">{{ suit }}</span>
