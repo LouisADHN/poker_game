@@ -1,0 +1,22 @@
+# ==================================================================
+# Caddy : obtient automatiquement un certificat HTTPS pour le domaine,
+# redirige HTTP vers HTTPS, et transmet tout le trafic à l'application
+# (WebSocket compris).
+# ==================================================================
+
+{$DOMAIN} {
+	# Compression des réponses : pages et scripts plus légers à télécharger
+	encode zstd gzip
+
+	header {
+		# Le navigateur n'utilisera plus que HTTPS pour ce site pendant un an
+		Strict-Transport-Security "max-age=31536000"
+		# N'envoie pas l'adresse de la page aux sites externes
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Ne révèle pas le logiciel serveur utilisé
+		-Server
+	}
+
+	# "app" est le nom du service dans compose.deploy.yaml
+	reverse_proxy app:8080
+}

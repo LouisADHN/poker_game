@@ -1,0 +1,63 @@
+# ==================================================================
+# Déploiement sur le serveur : Caddy (HTTPS) + application + base.
+#
+#   docker compose -f compose.deploy.yaml up -d
+#
+# L'image de l'application est téléchargée depuis GitHub : rien n'est compilé ici.
+# Les secrets sont lus dans le fichier .env, à côté de ce fichier.
+# ==================================================================
+
+services:
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: poker
+      POSTGRES_USER: poker
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Définis POSTGRES_PASSWORD dans le fichier .env}
+    volumes:
+      - poker-data:/var/lib/postgresql
+    # Pas de "ports" : la base n'est joignable que par l'application
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U poker -d poker']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    image: ghcr.io/louisadhn/poker-game:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/poker
+      SPRING_DATASOURCE_USERNAME: poker
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      POKER_JWT_SECRET: ${POKER_JWT_SECRET:?Définis POKER_JWT_SECRET dans le fichier .env}
+      POKER_ALLOWED_ORIGINS: https://${DOMAIN:?Définis DOMAIN dans le fichier .env}
+    # Mémoire maximale du conteneur : Java en utilise au plus 75 % (voir le Dockerfile)
+    mem_limit: 1g
+    # Pas de "ports" : seul Caddy parle à l'application
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - '80:80' # nécessaire pour obtenir le certificat, puis redirige vers HTTPS
+      - '443:443' # HTTPS
+      - '443:443/udp' # HTTP/3
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data # certificats HTTPS : à conserver
+      - caddy-config:/config
+
+volumes:
+  poker-data:
+  caddy-data:
+  caddy-config:
