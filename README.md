@@ -289,11 +289,12 @@ Le [`Dockerfile`](Dockerfile) construit l'application en trois étapes : compila
 
 ### Production
 
-Le serveur de production n'a besoin que de trois fichiers, dans [`deploy/`](deploy) :
+Le serveur de production n'a besoin que de deux fichiers, dans [`deploy/`](deploy) :
 
-- `compose.deploy.yaml` : Caddy, l'application et PostgreSQL ;
-- `Caddyfile` : HTTPS automatique et proxy vers l'application ;
+- `compose.deploy.yaml` : l'application et PostgreSQL ;
 - `.env` : les secrets, créé sur le serveur à partir de `.env.example`, **jamais commité**.
+
+HTTPS est assuré par un Caddy partagé entre tous les sites du VPS (stack à part) : l'application rejoint le réseau Docker `web` sous le nom `poker-app`, sans publier de port.
 
 ```bash
 docker compose -f compose.deploy.yaml up -d
