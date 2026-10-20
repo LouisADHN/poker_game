@@ -306,6 +306,7 @@ class GamePlayTest {
         String gameOver = waitFor(alice.tableMessages, "GAME_OVER", new ArrayList<>());
         List<Integer> chips = JsonPath.read(gameOver, "$.data.standings[*].chips");
         assertEquals(List.of(400, 0), chips); // le gagnant a tout, le total est conservé
+        assertEquals("COMPLETED", JsonPath.read(gameOver, "$.data.reason"));
 
         // La partie se termine, puis la table disparaît du lobby
         long deadline = System.currentTimeMillis() + 5000;

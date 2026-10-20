@@ -40,6 +40,14 @@ public class GameSession {
 
     public static final String PRIVATE_QUEUE = "/queue/game";
 
+    /** Pourquoi la partie s'est terminée : envoyé dans le message GAME_OVER. */
+    public enum EndReason {
+        /** Il ne reste qu'un joueur avec des jetons : la partie est allée à son terme. */
+        COMPLETED,
+        /** Trop de joueurs sont partis ou absents pour continuer. La partie ne compte pas au classement. */
+        ABANDONED
+    }
+
     private static final Logger log = LoggerFactory.getLogger(GameSession.class);
 
     private final long tableId;
@@ -53,6 +61,12 @@ public class GameSession {
     private final Map<Long, RemotePlayerController> controllersByUser = new HashMap<>();
     private final Map<String, Long> userIdByName = new HashMap<>();
     private final Map<Long, String> nameByUserId = new HashMap<>();
+    /**
+     * Présence de chaque joueur, par identifiant.
+     * Modifiée par plusieurs threads (WebSocket, minuteur, HTTP) : toujours lue et écrite
+     * dans une méthode synchronized de cette classe.
+     */
+
     private final Map<Long, Presence> presenceByUser = new HashMap<>();
     private final GameEngine engine;
     private final ResultTracker resultTracker;
@@ -172,6 +186,34 @@ public class GameSession {
         return presenceByUser.get(userId);
     }
 
+    /**
+     * Vrai si la partie ne peut plus continuer, faute de joueurs.
+     * Appelé par le thread de la table, entre deux mains.
+     *
+     * Seuls comptent les joueurs qui ont encore des jetons (un joueur éliminé ne joue plus).
+     * La partie est abandonnée :
+     * - s'il en reste moins de 2 qui n'ont pas quitté la partie ;
+     * - ou si aucun d'eux n'est connecté (ou en train de se reconnecter) :
+     *   sinon des joueurs en automatique s'échangeraient les blinds sans fin.
+     */
+    synchronized boolean isAbandoned() {
+        int notLeft = 0;
+        int connected = 0;
+        for (Player player : players) {
+            if (player.getChips() == 0) {
+                continue;
+            }
+            Presence presence = presenceByUser.get(userIdByName.get(player.getName()));
+            if (presence != Presence.LEFT) {
+                notLeft++;
+            }
+            if (presence == Presence.PRESENT || presence == Presence.DISCONNECTED) {
+                connected++;
+            }
+        }
+        return notLeft < 2 || connected == 0;
+    }
+
     /** Réservé aux tests : le contrôleur d'un joueur. */
     RemotePlayerController controllerOf(Long userId) {
         return controllersByUser.get(userId);
@@ -185,17 +227,27 @@ public class GameSession {
             // Laisse aux navigateurs le temps de s'abonner aux messages de la partie
             Thread.sleep(pauseBetweenHands);
 
+            boolean abandoned = false;
             while (running && !engine.isGameOver()) {
+                // Vérifié ENTRE deux mains : interrompre une main laisserait des jetons au milieu du pot
+                if (isAbandoned()) {
+                    abandoned = true;
+                    break;
+                }
                 engine.playHand();
                 if (!engine.isGameOver()) {
                     Thread.sleep(pauseBetweenHands); // le temps de voir qui a gagné la main
                 }
             }
 
-            if (engine.isGameOver()) {
-                sendToTable(gameOverMessage());
+            if (abandoned) {
+                log.info("Partie de la table {} abandonnée", tableId);
+                sendToTable(gameOverMessage(EndReason.ABANDONED)); // pas de recordResult() : elle ne compte pas
+            } else if (engine.isGameOver()) {
+                sendToTable(gameOverMessage(EndReason.COMPLETED));
                 recordResult();
             }
+
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.info("Partie de la table {} arrêtée", tableId);
@@ -222,12 +274,14 @@ public class GameSession {
         }
     }
 
-    private GameMessage gameOverMessage() {
+    private GameMessage gameOverMessage(EndReason reason) {
         List<Map<String, Object>> standings = players.stream()
                 .sorted(Comparator.comparingInt(Player::getChips).reversed())
                 .map(p -> Map.<String, Object>of("player", p.getName(), "chips", p.getChips()))
                 .toList();
-        return new GameMessage("GAME_OVER", Map.of("standings", standings));
+        return new GameMessage("GAME_OVER", Map.of(
+                "reason", reason.name(),
+                "standings", standings));
     }
 
     // ------------------------------------------------------------------
