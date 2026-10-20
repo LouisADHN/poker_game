@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { ApiError } from '@/api/http'
-import type { ActionPayload, Presence, TableView } from '@/api/types.ts'
+import type { ActionPayload, Presence, TableView, YourTurn } from '@/api/types.ts'
 import { describeAction, describePresence, useGameStore } from '../game'
 
 describe('describeAction', () => {
@@ -45,6 +45,19 @@ const table: TableView = {
   ],
 }
 
+/** Un message YOUR_TURN : c'est à moi (Alice) de jouer, je peux checker. */
+const yourTurn: YourTurn = {
+  street: 'PREFLOP',
+  holeCards: ['As', 'Kd'],
+  board: [],
+  chips: 980,
+  pot: 40,
+  currentBet: 20,
+  myStreetBet: 20,
+  opponents: [{ name: 'Bob', chips: 980, status: 'ACTIVE', streetBet: 20 }],
+  legalActions: { canCheck: true, toCall: 0, canRaise: true, minRaiseTo: 40, maxRaiseTo: 1000 },
+}
+
 describe('useGameStore', () => {
   beforeEach(() => {
     // Chaque test a son propre Pinia : les stores repartent de zéro
@@ -82,6 +95,38 @@ describe('useGameStore', () => {
 
     expect(game.players.find((p) => p.name === 'Bob')?.presence).toBe('PRESENT')
     expect(game.log[0]).toBe('Bob est de retour')
+  })
+
+  it('une action jouée pour moi par le serveur termine mon tour', () => {
+    // Je suis Alice : le store d'authentification lit l'utilisateur dans le localStorage
+    localStorage.setItem('poker.user', JSON.stringify({ id: 1, username: 'Alice' }))
+    const game = startedStore()
+    game.handle({ type: 'YOUR_TURN', data: yourTurn })
+    expect(game.turn).not.toBeNull()
+
+    // Le délai est écoulé : le serveur checke pour moi
+    game.handle({
+      type: 'PLAYER_ACTED',
+      data: { player: 'Alice', action: { type: 'CHECK' }, streetBet: 20, chipsLeft: 980 },
+    })
+
+    expect(game.turn).toBeNull()
+    expect(game.turnDeadline).toBeNull()
+    localStorage.removeItem('poker.user')
+  })
+
+  it("l'action d'un adversaire ne termine pas mon tour", () => {
+    localStorage.setItem('poker.user', JSON.stringify({ id: 1, username: 'Alice' }))
+    const game = startedStore()
+    game.handle({ type: 'YOUR_TURN', data: yourTurn })
+
+    game.handle({
+      type: 'PLAYER_ACTED',
+      data: { player: 'Bob', action: { type: 'CALL' }, streetBet: 20, chipsLeft: 980 },
+    })
+
+    expect(game.turn).not.toBeNull()
+    localStorage.removeItem('poker.user')
   })
 
   it('GAME_OVER retient le motif de fin', () => {

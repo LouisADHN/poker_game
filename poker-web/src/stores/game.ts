@@ -274,6 +274,12 @@ export const useGameStore = defineStore('game', () => {
             p.status = 'ALL_IN'
           }
         }
+        // C'est moi qui viens d'agir : si le serveur a joué à ma place (délai écoulé),
+        // mon tour est fini, il faut retirer les boutons et le compte à rebours
+        if (player === auth.user?.username) {
+          turn.value = null
+          turnDeadline.value = null
+        }
         addLog(`${player} ${describeAction(action)}`)
         break
       }
