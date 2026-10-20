@@ -44,7 +44,7 @@ class GameSessionPresenceTest {
                 "Table de test",
                 List.of(new Seat(LOUIS, "Louis"), new Seat(ALICE, "Alice")),
                 new TableSettings(10, 20, 1000, 6),
-                new GameProperties(Duration.ofSeconds(30), Duration.ofSeconds(3)),
+                new GameProperties(Duration.ofSeconds(30), Duration.ofSeconds(3), Duration.ofSeconds(30)),
                 messaging,
                 result -> { },
                 () -> { });

@@ -73,6 +73,17 @@ public class GameService {
         return session.submit(userId, action);
     }
 
+    /**
+     * Change la présence d'un joueur dans la partie où il joue, s'il en a une.
+     * Appelé par le ConnectionRegistry (connexion, déconnexion, fin du délai de grâce).
+     *
+     * Le lobby garantit qu'un joueur n'est assis qu'à une table : au plus une session le connaît,
+     * les autres ignorent l'appel (updatePresence renvoie false pour un joueur inconnu).
+     */
+    public void updatePresence(Long userId, Presence presence) {
+        sessions.values().forEach(session -> session.updatePresence(userId, presence));
+    }
+
     public boolean isRunning(long tableId) {
         return sessions.containsKey(tableId);
     }

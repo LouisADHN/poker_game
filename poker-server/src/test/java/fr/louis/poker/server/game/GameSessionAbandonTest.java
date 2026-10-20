@@ -73,7 +73,7 @@ class GameSessionAbandonTest {
                 List.of(seats),
                 new TableSettings(10, 20, 1000, 6),
                 // Délai de réflexion long : si la partie attendait un joueur absent, le test le verrait
-                new GameProperties(Duration.ofSeconds(30), SHORT_PAUSE),
+                new GameProperties(Duration.ofSeconds(30), SHORT_PAUSE, Duration.ofSeconds(30)),
                 messaging,
                 recordedResult::set,
                 finished::countDown);
