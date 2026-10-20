@@ -5,6 +5,7 @@ import fr.louis.poker.controller.GameView;
 import fr.louis.poker.controller.PlayerController;
 
 import java.time.Duration;
+import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -20,17 +21,30 @@ import java.util.function.Consumer;
  * La BlockingQueue assure l'échange entre les deux sans problème de concurrence.
  * Si le joueur ne répond pas à temps, decide() renvoie null :
  * le moteur applique alors l'action par défaut (check si possible, sinon fold).
+ *
+ * Jeu automatique : un joueur absent ou parti ne doit pas faire attendre la table.
+ * En jeu automatique, decide() renvoie null tout de suite, et setAutoPlay(true)
+ * réveille un decide() déjà en train d'attendre.
  */
 public class RemotePlayerController implements PlayerController {
+
+    /**
+     * Ce que la file transporte : une action du joueur, ou un « réveil » vide.
+     * Une LinkedBlockingQueue refuse null : Optional.empty() joue donc le rôle de « pas d'action, arrête d'attendre ».
+     */
+    private static final Optional<Action> WAKE_UP = Optional.empty();
 
     private final Long userId;
     private final Consumer<GameMessage> privateSender;
     private final Duration timeout;
 
-    private final BlockingQueue<Action> actions = new LinkedBlockingQueue<>();
+    private final BlockingQueue<Optional<Action>> actions = new LinkedBlockingQueue<>();
 
     /** Vrai uniquement pendant que le moteur attend la décision de ce joueur. */
     private volatile boolean waiting = false;
+
+    /** Vrai si le joueur joue en automatique (absent ou parti). */
+    private volatile boolean autoPlay = false;
 
     /**
      * @param userId        identifiant du joueur
@@ -51,16 +65,47 @@ public class RemotePlayerController implements PlayerController {
         return waiting;
     }
 
+    public boolean isAutoPlay() {
+        return autoPlay;
+    }
+
+    /**
+     * Active ou désactive le jeu automatique. Appelé par un autre thread que celui de la table.
+     *
+     * Si on l'active pendant que le moteur attend ce joueur, l'attente s'arrête tout de suite :
+     * la table n'a pas à patienter jusqu'à la fin du délai.
+     */
+    public void setAutoPlay(boolean enabled) {
+        // L'ordre compte : on écrit autoPlay AVANT de lire waiting (voir decide()).
+        autoPlay = enabled;
+        if (enabled && waiting) {
+            actions.offer(WAKE_UP);
+        }
+    }
+
     /** Appelé par le thread de la table : prévient le joueur, puis attend son action. */
     @Override
     public Action decide(GameView view) {
-        // Une action reçue hors de son tour ne doit jamais être utilisée maintenant
+        // Une action (ou un réveil) reçue hors de son tour ne doit jamais être utilisée maintenant
         actions.clear();
         waiting = true;
         try {
+            /*
+             * Le piège : setAutoPlay(true) peut arriver juste avant que waiting passe à true.
+             * Il voit alors waiting == false et ne réveille personne : sans ce test,
+             * on attendrait tout le délai pour rien.
+             * Ici on écrit waiting PUIS on lit autoPlay ; setAutoPlay écrit autoPlay PUIS lit waiting.
+             * Les deux champs sont volatile : l'un des deux threads voit forcément l'écriture de l'autre.
+             */
+            if (autoPlay) {
+                return null;
+            }
+
             privateSender.accept(GameMessages.yourTurn(view));
             // Attend une action au maximum "timeout" ; null si le délai expire
-            return actions.poll(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            Optional<Action> received = actions.poll(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            // received == null : délai expiré ; Optional vide : réveil (passage en automatique)
+            return received == null ? null : received.orElse(null);
         } catch (InterruptedException e) {
             // La partie est arrêtée : on rétablit le signal d'interruption pour l'appelant
             Thread.currentThread().interrupt();
@@ -79,6 +124,6 @@ public class RemotePlayerController implements PlayerController {
         if (!waiting) {
             return false;
         }
-        return actions.offer(action);
+        return actions.offer(Optional.of(action));
     }
 }

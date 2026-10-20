@@ -138,4 +138,71 @@ class RemotePlayerControllerTest {
         assertEquals("null", result.poll(5, TimeUnit.SECONDS));
         assertEquals(Boolean.TRUE, interruptFlag.poll(5, TimeUnit.SECONDS));
     }
+
+    // ------------------------------------------------------------------
+    // Jeu automatique
+
+    @Test
+    @DisplayName("En jeu automatique, decide() renvoie null tout de suite, sans prévenir le joueur")
+    void autoPlayDecidesImmediately() throws Exception {
+        RemotePlayerController controller = controller(LONG_TIMEOUT);
+        controller.setAutoPlay(true);
+
+        CompletableFuture<Action> decision = CompletableFuture.supplyAsync(() -> controller.decide(sampleView()));
+
+        // 1 s, bien moins que le délai de 5 s : si on attendait le délai, get() lèverait une TimeoutException
+        assertNull(decision.get(1, TimeUnit.SECONDS));
+        assertTrue(sentMessages.isEmpty(), "Aucun YOUR_TURN ne doit partir vers un joueur absent");
+    }
+
+    @Test
+    @DisplayName("Passer en jeu automatique pendant l'attente réveille decide() tout de suite")
+    void autoPlayWakesUpWaitingDecision() throws Exception {
+        RemotePlayerController controller = controller(LONG_TIMEOUT);
+        CompletableFuture<Action> decision = startDecision(controller);
+        assertTrue(controller.isWaiting());
+
+        controller.setAutoPlay(true);
+
+        assertNull(decision.get(1, TimeUnit.SECONDS));
+        assertFalse(controller.isWaiting());
+    }
+
+    @Test
+    @DisplayName("Une action envoyée en jeu automatique est refusée")
+    void actionDuringAutoPlayIsRefused() {
+        RemotePlayerController controller = controller(SHORT_TIMEOUT);
+        controller.setAutoPlay(true);
+        assertFalse(controller.submit(new Action.Call()));
+    }
+
+    @Test
+    @DisplayName("Après le retour du joueur, decide() attend de nouveau son action")
+    void autoPlayCanBeDisabled() throws Exception {
+        RemotePlayerController controller = controller(LONG_TIMEOUT);
+        controller.setAutoPlay(true);
+        controller.setAutoPlay(false);
+        assertFalse(controller.isAutoPlay());
+
+        CompletableFuture<Action> decision = startDecision(controller);
+        assertTrue(controller.submit(new Action.Call()));
+        assertEquals(new Action.Call(), decision.get(5, TimeUnit.SECONDS));
+    }
+
+    @Test
+    @DisplayName("Un réveil resté dans la file ne fait pas sauter le tour suivant")
+    void leftoverWakeUpIsNotReused() throws Exception {
+        RemotePlayerController controller = controller(SHORT_TIMEOUT);
+
+        // Tour 1 : le joueur passe en automatique pendant l'attente
+        CompletableFuture<Action> first = startDecision(controller);
+        controller.setAutoPlay(true);
+        assertNull(first.get(1, TimeUnit.SECONDS));
+
+        // Il revient : au tour 2, il doit pouvoir jouer normalement
+        controller.setAutoPlay(false);
+        CompletableFuture<Action> second = startDecision(controller);
+        assertTrue(controller.submit(new Action.Fold()));
+        assertEquals(new Action.Fold(), second.get(5, TimeUnit.SECONDS));
+    }
 }
