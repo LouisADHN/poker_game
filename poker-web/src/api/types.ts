@@ -74,6 +74,12 @@ export type PlayerStatus = 'ACTIVE' | 'FOLDED' | 'ALL_IN' | 'OUT'
 
 export type ActionType = 'FOLD' | 'CHECK' | 'CALL' | 'BET' | 'RAISE' | 'ALL_IN'
 
+/** Presence côté serveur : un joueur connecté, en délai de grâce, absent ou parti. */
+export type Presence = 'PRESENT' | 'DISCONNECTED' | 'AWAY' | 'LEFT'
+
+/** GameSession.EndReason côté serveur : partie allée à son terme, ou abandonnée. */
+export type EndReason = 'COMPLETED' | 'ABANDONED'
+
 /** Une action, envoyée au serveur ou reçue de lui. "total" n'existe que pour BET et RAISE. */
 export interface ActionPayload {
   type: ActionType
@@ -142,5 +148,6 @@ export type GameMessage =
   | { type: 'POT_WON'; data: { player: string; amount: number } }
   | { type: 'HAND_ENDED'; data: { handNumber: number } }
   | { type: 'YOUR_TURN'; data: YourTurn }
-  | { type: 'GAME_OVER'; data: { standings: Standing[] } }
+  | { type: 'PLAYER_PRESENCE'; data: { player: string; presence: Presence } }
+  | { type: 'GAME_OVER'; data: { reason: EndReason; standings: Standing[] } }
   | { type: 'ERROR' | 'GAME_ERROR'; data: { message: string } }

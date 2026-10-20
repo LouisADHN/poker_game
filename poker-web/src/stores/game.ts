@@ -1,10 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import {api} from "@/api/http"
 import { connect, publish, subscribe } from '@/api/stomp'
 import type {
   ActionPayload,
+  EndReason,
   GameMessage,
   PlayerStatus,
+  Presence,
   Standing,
   Street,
   TableView,
@@ -24,6 +27,8 @@ export interface PlayerState {
   revealedCards: string[] | null
   /** Catégorie de la main au showdown : "Full", "Paire"… */
   category: string | null
+  /** Connecté, déconnecté, absent ou parti (message PLAYER_PRESENCE) */
+  presence: Presence
 }
 
 export const TURN_SECONDS = 30
@@ -66,6 +71,37 @@ export function describeAction(action: ActionPayload): string {
 }
 
 /**
+ * Texte court à afficher sur la place d'un joueur selon sa présence.
+ * null quand il n'y a rien à signaler (le joueur est là).
+ */
+export function describePresence(presence: Presence): string | null {
+  switch (presence) {
+    case 'PRESENT':
+      return null
+    case 'DISCONNECTED':
+      return 'Déconnecté…'
+    case 'AWAY':
+      return 'Absent'
+    case 'LEFT':
+      return 'A quitté la partie'
+  }
+}
+
+/** Ligne d'historique annonçant un changement de présence. */
+function presenceLogLine(player: string, presence: Presence): string {
+  switch (presence) {
+    case 'PRESENT':
+      return `${player} est de retour`
+    case 'DISCONNECTED':
+      return `${player} s'est déconnecté`
+    case 'AWAY':
+      return `${player} est absent : il joue en automatique`
+    case 'LEFT':
+      return `${player} a quitté la partie`
+  }
+}
+
+/**
  * État de la partie en cours, reconstruit à partir des messages du serveur.
  */
 export const useGameStore = defineStore('game', () => {
@@ -87,6 +123,8 @@ export const useGameStore = defineStore('game', () => {
   const log = ref<string[]>([])
   /** Classement final, non null quand la partie est terminée */
   const standings = ref<Standing[] | null>(null)
+  /** Motif de fin de partie, non null quand la partie est terminée */
+  const endReason = ref<EndReason | null>(null)
   const error = ref<string | null>(null)
 
   let unsubscribers: (() => void)[] = []
@@ -105,6 +143,7 @@ export const useGameStore = defineStore('game', () => {
       lastAction: null,
       revealedCards: null,
       category: null,
+      presence: "PRESENT",
     }))
     board.value = []
     pot.value = 0
@@ -115,6 +154,7 @@ export const useGameStore = defineStore('game', () => {
     turnDeadline.value = null
     log.value = []
     standings.value = null
+    endReason.value = null
     error.value = null
 
     if (!auth.token) {
@@ -139,6 +179,19 @@ export const useGameStore = defineStore('game', () => {
     }
     error.value = null
     publish(`/app/tables/${tableId.value}/action`, action)
+    turn.value = null
+    turnDeadline.value = null
+  }
+
+  /**
+   * Quitte la partie en cours, définitivement : le serveur jouera pour moi jusqu'à la fin.
+   * Peut lever une ApiError (par exemple 409 si la partie vient de se terminer).
+   */
+  async function leaveGame(): Promise<void> {
+    if (tableId.value === null) {
+      return
+    }
+    await api<void>(`/api/tables/${tableId.value}/leave-game`, { method: 'POST' })
     turn.value = null
     turnDeadline.value = null
   }
@@ -278,11 +331,22 @@ export const useGameStore = defineStore('game', () => {
         break
       }
 
+      case 'PLAYER_PRESENCE': {
+        const { player, presence } = message.data
+        const p = findPlayer(player)
+        if (p) {
+          p.presence = presence
+        }
+        addLog(presenceLogLine(player, presence))
+        break
+      }
+
       case 'GAME_OVER':
         standings.value = message.data.standings
+        endReason.value = message.data.reason
         turn.value = null
         turnDeadline.value = null
-        addLog('Fin de la partie')
+        addLog(message.data.reason === 'ABANDONED' ? 'Partie abandonnée' : 'Fin de la partie')
         break
 
       case 'ERROR':
@@ -305,9 +369,13 @@ export const useGameStore = defineStore('game', () => {
     turnDeadline,
     log,
     standings,
+    endReason,
     error,
     start,
     stop,
     act,
+    leaveGame,
+    /** Exposé pour les tests : applique un message comme s'il venait du serveur. */
+    handle,
   }
 })

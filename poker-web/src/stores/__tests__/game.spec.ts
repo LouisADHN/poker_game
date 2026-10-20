@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest'
-import type { ActionPayload } from '@/api/types.ts'
-import { describeAction } from '../game'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+import { ApiError } from '@/api/http'
+import type { ActionPayload, Presence, TableView } from '@/api/types.ts'
+import { describeAction, describePresence, useGameStore } from '../game'
 
 describe('describeAction', () => {
   // it.each : le même test, exécuté pour chaque ligne du tableau
@@ -13,5 +15,110 @@ describe('describeAction', () => {
     [{ type: 'ALL_IN' }, 'fait tapis'],
   ])('%o -> "%s"', (action, expected) => {
     expect(describeAction(action)).toBe(expected)
+  })
+})
+
+describe('describePresence', () => {
+  it.each<[Presence, string | null]>([
+    ['PRESENT', null],
+    ['DISCONNECTED', 'Déconnecté…'],
+    ['AWAY', 'Absent'],
+    ['LEFT', 'A quitté la partie'],
+  ])('%s -> %o', (presence, expected) => {
+    expect(describePresence(presence)).toBe(expected)
+  })
+})
+
+// ------------------------------------------------------------------
+// Le store de la partie
+
+/** Une table de 2 joueurs, telle que le serveur la renvoie. */
+const table: TableView = {
+  id: 7,
+  name: 'Table de test',
+  settings: { smallBlind: 10, bigBlind: 20, startingChips: 1000, maxPlayers: 2 },
+  ownerId: 1,
+  status: 'PLAYING',
+  players: [
+    { userId: 1, username: 'Alice' },
+    { userId: 2, username: 'Bob' },
+  ],
+}
+
+describe('useGameStore', () => {
+  beforeEach(() => {
+    // Chaque test a son propre Pinia : les stores repartent de zéro
+    setActivePinia(createPinia())
+    vi.unstubAllGlobals()
+  })
+
+  /** Le store, préparé pour la table de test (sans connexion : aucun jeton dans ce test). */
+  function startedStore() {
+    const game = useGameStore()
+    game.start(table)
+    return game
+  }
+
+  it('commence avec tous les joueurs présents', () => {
+    const game = startedStore()
+    expect(game.players.map((p) => p.presence)).toEqual(['PRESENT', 'PRESENT'])
+  })
+
+  it("PLAYER_PRESENCE met à jour la présence du bon joueur et l'historique", () => {
+    const game = startedStore()
+
+    game.handle({ type: 'PLAYER_PRESENCE', data: { player: 'Bob', presence: 'AWAY' } })
+
+    expect(game.players.find((p) => p.name === 'Bob')?.presence).toBe('AWAY')
+    expect(game.players.find((p) => p.name === 'Alice')?.presence).toBe('PRESENT')
+    expect(game.log[0]).toBe('Bob est absent : il joue en automatique')
+  })
+
+  it('un retour remet le joueur présent', () => {
+    const game = startedStore()
+    game.handle({ type: 'PLAYER_PRESENCE', data: { player: 'Bob', presence: 'DISCONNECTED' } })
+
+    game.handle({ type: 'PLAYER_PRESENCE', data: { player: 'Bob', presence: 'PRESENT' } })
+
+    expect(game.players.find((p) => p.name === 'Bob')?.presence).toBe('PRESENT')
+    expect(game.log[0]).toBe('Bob est de retour')
+  })
+
+  it('GAME_OVER retient le motif de fin', () => {
+    const game = startedStore()
+
+    game.handle({
+      type: 'GAME_OVER',
+      data: { reason: 'ABANDONED', standings: [{ player: 'Alice', chips: 1000 }] },
+    })
+
+    expect(game.endReason).toBe('ABANDONED')
+    expect(game.standings).toEqual([{ player: 'Alice', chips: 1000 }])
+    expect(game.log[0]).toBe('Partie abandonnée')
+  })
+
+  it('leaveGame appelle POST /api/tables/{id}/leave-game', async () => {
+    // Faux fetch : le serveur répond 204, sans corps
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const game = startedStore()
+
+    await game.leaveGame()
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const [url, options] = fetchMock.mock.calls[0]!
+    expect(url).toBe('/api/tables/7/leave-game')
+    expect(options?.method).toBe('POST')
+  })
+
+  it('leaveGame transmet le refus du serveur', async () => {
+    const problem = { status: 409, detail: 'Aucune partie en cours à cette table' }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>().mockResolvedValue(Response.json(problem, { status: 409 })),
+    )
+    const game = startedStore()
+
+    await expect(game.leaveGame()).rejects.toBeInstanceOf(ApiError)
   })
 })
