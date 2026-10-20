@@ -52,6 +52,7 @@ public class GameSession {
     private final List<Player> players = new ArrayList<>();
     private final Map<Long, RemotePlayerController> controllersByUser = new HashMap<>();
     private final Map<String, Long> userIdByName = new HashMap<>();
+    private final Map<Long, String> nameByUserId = new HashMap<>();
     private final Map<Long, Presence> presenceByUser = new HashMap<>();
     private final GameEngine engine;
     private final ResultTracker resultTracker;
@@ -95,6 +96,7 @@ public class GameSession {
             controllers.put(player, controller);
             controllersByUser.put(seat.userId(), controller);
             userIdByName.put(seat.username(), seat.userId());
+            nameByUserId.put(seat.userId(), seat.username());
             presenceByUser.put(seat.userId(), Presence.PRESENT);
         }
 
@@ -159,6 +161,9 @@ public class GameSession {
 
         presenceByUser.put(userId, presence);
         controllersByUser.get(userId).setAutoPlay(presence.isAutoPlay());
+
+        // Envoyé sous le verrou : la table reçoit les changements dans l'ordre où ils ont eu lieu
+        sendToTable(GameMessages.playerPresence(nameByUserId.get(userId), presence));
         return true;
     }
 

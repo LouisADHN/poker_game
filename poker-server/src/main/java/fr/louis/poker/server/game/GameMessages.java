@@ -74,6 +74,16 @@ public class GameMessages {
         };
     }
 
+    /**
+     * Un joueur a changé de présence (déconnecté, absent, revenu, parti).
+     * Le joueur est désigné par son pseudo, comme dans tous les autres messages de la partie.
+     */
+    public static GameMessage playerPresence(String player, Presence presence) {
+        return new GameMessage("PLAYER_PRESENCE", Map.of(
+                "player", player,
+                "presence", presence.name()));
+    }
+
     public static GameMessage yourTurn(GameView view) {
         return new GameMessage("YOUR_TURN", Map.of(
                 "street", view.street().name(),

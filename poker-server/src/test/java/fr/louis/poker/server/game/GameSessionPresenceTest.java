@@ -5,10 +5,14 @@ import fr.louis.poker.server.lobby.TableSettings;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -26,10 +30,14 @@ class GameSessionPresenceTest {
 
     private GameSession session;
 
+    /** Messages « envoyés » par la session, dans l'ordre : on les garde au lieu de les envoyer. */
+    private List<Message<?>> sentMessages;
+
     @BeforeEach
     void setUp() {
-        // Un faux canal de messages qui accepte tout sans rien envoyer : pas besoin de vrai WebSocket ici
-        SimpMessagingTemplate messaging = new SimpMessagingTemplate((message, timeout) -> true);
+        // Un faux canal de messages qui garde tout sans rien envoyer : pas besoin de vrai WebSocket ici
+        sentMessages = new ArrayList<>();
+        SimpMessagingTemplate messaging = new SimpMessagingTemplate((message, timeout) -> sentMessages.add(message));
 
         session = new GameSession(
                 1L,
@@ -99,5 +107,46 @@ class GameSessionPresenceTest {
 
         assertEquals(Presence.PRESENT, session.presenceOf(ALICE));
         assertFalse(session.controllerOf(ALICE).isAutoPlay());
+    }
+
+    // ------------------------------------------------------------------
+    // Message PLAYER_PRESENCE
+
+    @Test
+    @DisplayName("Un changement de présence est annoncé à toute la table")
+    void presenceChangeIsBroadcastToTheTable() {
+        session.updatePresence(LOUIS, Presence.DISCONNECTED);
+
+        assertEquals(1, sentMessages.size());
+        Message<?> message = sentMessages.getFirst();
+        assertEquals(GameSession.gameTopic(1L), SimpMessageHeaderAccessor.getDestination(message.getHeaders()));
+        assertEquals(new GameMessage("PLAYER_PRESENCE", Map.of("player", "Louis", "presence", "DISCONNECTED")),
+                message.getPayload());
+    }
+
+    @Test
+    @DisplayName("Aucun message quand la présence ne change pas")
+    void noMessageWithoutChange() {
+        session.updatePresence(LOUIS, Presence.PRESENT);   // déjà présent
+        session.updatePresence(STRANGER, Presence.AWAY);   // pas à la table
+        assertTrue(sentMessages.isEmpty());
+
+        session.updatePresence(LOUIS, Presence.LEFT);      // ce changement-là est annoncé…
+        sentMessages.clear();
+        session.updatePresence(LOUIS, Presence.PRESENT);   // …mais pas ce retour refusé
+        assertTrue(sentMessages.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Les changements successifs arrivent dans l'ordre")
+    void changesAreSentInOrder() {
+        session.updatePresence(LOUIS, Presence.DISCONNECTED);
+        session.updatePresence(LOUIS, Presence.AWAY);
+        session.updatePresence(LOUIS, Presence.PRESENT);
+
+        List<Object> presences = sentMessages.stream()
+                .map(message -> ((GameMessage) message.getPayload()).data().get("presence"))
+                .toList();
+        assertEquals(List.of("DISCONNECTED", "AWAY", "PRESENT"), presences);
     }
 }

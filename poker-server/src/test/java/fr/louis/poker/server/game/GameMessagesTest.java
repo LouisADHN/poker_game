@@ -155,4 +155,18 @@ class GameMessagesTest {
             assertEquals(Map.of("player", "Louis", "amount", 10), message.data());
         }
     }
+
+    // ------------------------------------------------------------------
+    @Nested
+    @DisplayName("Messages propres au serveur")
+    class ServerMessages {
+
+        @Test
+        @DisplayName("PLAYER_PRESENCE indique le joueur et sa présence en texte")
+        void playerPresence() {
+            GameMessage message = GameMessages.playerPresence("Louis", Presence.AWAY);
+            assertEquals("PLAYER_PRESENCE", message.type());
+            assertEquals(Map.of("player", "Louis", "presence", "AWAY"), message.data());
+        }
+    }
 }
