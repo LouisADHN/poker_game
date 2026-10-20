@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { api, ApiError } from '@/api/http'
-import type { ActionType, TableView } from '@/api/types'
-import { useAuthStore } from '@/stores/auth'
-import { TURN_SECONDS, useGameStore, type PlayerState } from '@/stores/game'
+import {computed, onMounted, onUnmounted, ref, watch} from 'vue'
+import {useRoute, useRouter} from 'vue-router'
+import {api, ApiError} from '@/api/http'
+import type {ActionType, TableView} from '@/api/types'
+import {useAuthStore} from '@/stores/auth'
+import {TURN_SECONDS, describePresence, useGameStore, type PlayerState} from '@/stores/game'
 import PlayingCard from '@/components/PlayingCard.vue'
 
 const route = useRoute()
@@ -97,6 +97,11 @@ function isInHand(player: PlayerState): boolean {
   return game.handNumber > 0 && (player.status === 'ACTIVE' || player.status === 'ALL_IN')
 }
 
+/** Vrai si le joueur n'est pas là : déconnecté, absent ou parti */
+function isAbsent(player: PlayerState): boolean {
+  return player.presence !== 'PRESENT'
+}
+
 function statusText(player: PlayerState): string | null {
   if (player.status === 'OUT') return 'Éliminé'
   if (player.status === 'ALL_IN') return 'Tapis'
@@ -126,7 +131,7 @@ const waitingText = computed(() =>
 
 function play(type: ActionType, total?: number) {
   try {
-    game.act(total === undefined ? { type } : { type, total })
+    game.act(total === undefined ? {type} : {type, total})
   } catch (e) {
     game.error = e instanceof Error ? e.message : 'Action impossible.'
   }
@@ -137,14 +142,51 @@ function raise() {
   if (!turn) {
     return
   }
-  const { minRaiseTo, maxRaiseTo } = turn.legalActions
+  const {minRaiseTo, maxRaiseTo} = turn.legalActions
   const total = Math.min(Math.max(raiseTotal.value, minRaiseTo), maxRaiseTo)
   play(turn.currentBet === 0 ? 'BET' : 'RAISE', total)
 }
 
 function backToLobby() {
-  router.push({ name: 'lobby' })
+  router.push({name: 'lobby'})
 }
+
+// ------------------------------------------------------------------
+// Quitter la partie
+
+/** Vrai pendant l'envoi de la demande : le bouton est désactivé, pas de double envoi */
+const leaving = ref(false)
+
+/** Le bouton n'a de sens que pendant la partie : une fois la table chargée, et avant la fin */
+const canLeave = computed(() => game.tableId !== null && game.standings === null)
+
+async function leave() {
+  const confirmed = window.confirm(
+    'Quitter la partie ? Tu ne pourras pas y revenir : jusqu’à la fin, ' +
+    'le serveur jouera pour toi (check si possible, sinon couché).',
+  )
+  if (!confirmed) {
+    return
+  }
+
+  leaving.value = true
+  try {
+    await game.leaveGame()
+    await router.push({name: 'lobby'})
+  } catch (e) {
+    game.error = e instanceof ApiError ? e.message : 'Impossible de quitter la partie.'
+  } finally {
+    leaving.value = false
+  }
+}
+
+// ------------------------------------------------------------------
+// Fin de partie
+
+const gameOverTitle = computed(() =>
+  game.endReason === 'ABANDONED' ? 'Partie abandonnée' : 'Partie terminée',
+)
+
 </script>
 
 <template>
@@ -162,6 +204,15 @@ function backToLobby() {
       <header class="game-header">
         <h1>{{ game.tableName || 'Table' }}</h1>
         <p>{{ game.handNumber > 0 ? `Main n°${game.handNumber}` : 'La partie va commencer…' }}</p>
+        <button
+          v-if="canLeave"
+          type="button"
+          class="leave-button"
+          :disabled="leaving"
+          @click="leave"
+        >
+          {{ leaving ? 'Départ…' : 'Quitter la partie' }}
+        </button>
       </header>
 
       <!-- La table -->
@@ -172,7 +223,7 @@ function backToLobby() {
           <div class="felt">
             <div class="center">
               <div class="board" aria-label="Cartes communes">
-                <PlayingCard v-for="card in game.board" :key="card" :card="card" />
+                <PlayingCard v-for="card in game.board" :key="card" :card="card"/>
                 <span
                   v-for="n in emptyBoardSlots"
                   :key="`slot-${n}`"
@@ -210,6 +261,7 @@ function backToLobby() {
                 'seat--turn': isMe(seat.player.name) && game.turn !== null,
                 'seat--folded': seat.player.status === 'FOLDED',
                 'seat--out': seat.player.status === 'OUT',
+                'seat--away': isAbsent(seat.player),
               }"
               :style="{ '--x': `${seat.x}%`, '--y': `${seat.y}%` }"
             >
@@ -223,6 +275,9 @@ function backToLobby() {
                 >D</span
                 >
               </p>
+              <p v-if="isAbsent(seat.player)" class="seat-presence">
+                {{ describePresence(seat.player.presence) }}
+              </p>
               <p class="seat-chips">{{ seat.player.chips }}</p>
               <p v-if="seat.player.streetBet > 0" class="visually-hidden">
                 Mise : {{ seat.player.streetBet }}
@@ -230,20 +285,20 @@ function backToLobby() {
 
               <!-- Cartes : montrées au showdown, les miennes, ou le dos pour un adversaire en jeu -->
               <div v-if="seat.player.revealedCards" class="seat-cards">
-                <PlayingCard v-for="card in seat.player.revealedCards" :key="card" :card="card" />
+                <PlayingCard v-for="card in seat.player.revealedCards" :key="card" :card="card"/>
               </div>
               <div
                 v-else-if="isMe(seat.player.name) && game.myCards.length > 0"
                 class="seat-cards"
               >
-                <PlayingCard v-for="card in game.myCards" :key="card" :card="card" />
+                <PlayingCard v-for="card in game.myCards" :key="card" :card="card"/>
               </div>
               <div
                 v-else-if="!isMe(seat.player.name) && isInHand(seat.player)"
                 class="seat-cards"
               >
-                <PlayingCard hidden />
-                <PlayingCard hidden />
+                <PlayingCard hidden/>
+                <PlayingCard hidden/>
               </div>
 
               <p v-if="seat.player.category" class="seat-status">{{ seat.player.category }}</p>
@@ -332,7 +387,10 @@ function backToLobby() {
         aria-modal="true"
         aria-labelledby="game-over-title"
       >
-        <h2 id="game-over-title">Partie terminée</h2>
+        <h2 id="game-over-title">{{ gameOverTitle }}</h2>
+        <p v-if="game.endReason === 'ABANDONED'">
+          Trop de joueurs sont partis : cette partie ne compte pas au classement.
+        </p>
         <ol>
           <li v-for="standing in game.standings" :key="standing.player">
             <strong>{{ standing.player }}</strong> : {{ standing.chips }} jetons
@@ -392,6 +450,10 @@ function backToLobby() {
   color: var(--muted);
 }
 
+.leave-button {
+  margin-top: var(--space-2);
+}
+
 /* ------------------------------------------------------------------
    La zone de la table : un conteneur de taille (unités cqw / cqh).
    La table y prend la plus grande taille possible au format 16/10.
@@ -428,9 +490,8 @@ function backToLobby() {
     var(--felt) 45%,
     var(--felt-dark) 100%
   );
-  box-shadow:
-    inset 0 0 40px rgb(0 0 0 / 0.45),
-    0 12px 30px rgb(0 0 0 / 0.35);
+  box-shadow: inset 0 0 40px rgb(0 0 0 / 0.45),
+  0 12px 30px rgb(0 0 0 / 0.35);
 }
 
 .center {
@@ -575,6 +636,22 @@ function backToLobby() {
 
 .seat--out {
   opacity: 0.35;
+}
+
+/*
+  Joueur déconnecté, absent ou parti : bordure en pointillés, et sa présence écrite
+  en toutes lettres (la couleur ou la forme seule ne suffit pas). Pas d'opacité ici :
+  le texte doit garder un contraste suffisant (RGAA, critère 3.2).
+*/
+.seat--away {
+  border-style: dashed;
+  border-color: var(--muted);
+}
+
+.seat-presence {
+  color: var(--paper);
+  font-size: 0.85em;
+  font-weight: 700;
 }
 
 /* La seule animation de la page : c'est mon tour */
