@@ -12,10 +12,7 @@ import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import java.security.Principal;
 import java.time.Duration;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -85,6 +82,12 @@ public class ConnectionRegistry {
         }
     }
 
+    /** Une partie démarre : ses joueurs déjà déconnectés doivent être signalés. */
+    @EventListener
+    public void onGameStarted(GameStartedEvent event) {
+        gameStarted(event.userIds());
+    }
+
     /** Une connexion s'est fermée : onglet fermé, page rechargée, réseau coupé… */
     @EventListener
     public void onDisconnected(SessionDisconnectEvent event) {
@@ -122,7 +125,29 @@ public class ConnectionRegistry {
         sessionsByUser.remove(userId);
         log.info("Joueur {} déconnecté : {} pour revenir", userId, reconnectGrace);
         presenceUpdater.accept(userId, Presence.DISCONNECTED);
+        startGrace(userId);
+    }
 
+    /**
+     * Une partie démarre en croyant tous ses joueurs présents.
+     * Ceux qui n'ont plus aucune connexion (onglet fermé pendant l'attente dans le lobby)
+     * sont traités comme s'ils venaient de se déconnecter.
+     */
+    synchronized void gameStarted(Collection<Long> userIds) {
+        for (Long userId : userIds) {
+            if (sessionsByUser.containsKey(userId)) {
+                continue; // connecté : rien à faire
+            }
+            presenceUpdater.accept(userId, Presence.DISCONNECTED);
+            // Un délai déjà en cours (déconnecté il y a peu) continue ; sinon, un nouveau commence
+            if (!graceTokens.containsKey(userId)) {
+                startGrace(userId);
+            }
+        }
+    }
+
+    /** Lance le délai de grâce d'un joueur. Appelé sous le verrou. */
+    private void startGrace(Long userId) {
         Object token = new Object();
         graceTokens.put(userId, token);
         scheduler.schedule(() -> graceExpired(userId, token), reconnectGrace.toMillis(), TimeUnit.MILLISECONDS);

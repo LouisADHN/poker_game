@@ -69,6 +69,7 @@ class GamePlayTest {
     @Autowired private TokenService tokenService;
     @Autowired private LobbyService lobbyService;
     @Autowired private GameService gameService;
+    @Autowired private ConnectionRegistry connectionRegistry;
 
     private final HttpClient http = HttpClient.newHttpClient();
     private final List<WebSocketStompClient> stompClients = new ArrayList<>();
@@ -322,6 +323,28 @@ class GamePlayTest {
         String acted = waitFor(alice.tableMessages, "PLAYER_ACTED", new ArrayList<>());
         assertEquals("Alice", JsonPath.read(acted, "$.data.player"));
         assertEquals("FOLD", JsonPath.read(acted, "$.data.action.type")); // face à la big blind : fold
+    }
+
+    @Test
+    @DisplayName("Un joueur déjà déconnecté au lancement est signalé, puis passe absent")
+    void playerGoneBeforeStartIsDetected() throws Exception {
+        // Bob ferme son onglet pendant qu'il attend le lancement, assis à la table
+        bob.session.disconnect();
+        long deadline = System.currentTimeMillis() + 5000;
+        while (connectionRegistry.isConnected(bobAccount.getId()) && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20);
+        }
+        assertFalse(connectionRegistry.isConnected(bobAccount.getId()));
+
+        startGame(alice.token);
+
+        String disconnected = waitFor(alice.tableMessages, "PLAYER_PRESENCE", new ArrayList<>());
+        assertEquals("Bob", JsonPath.read(disconnected, "$.data.player"));
+        assertEquals("DISCONNECTED", JsonPath.read(disconnected, "$.data.presence"));
+
+        String away = waitFor(alice.tableMessages, "PLAYER_PRESENCE", new ArrayList<>());
+        assertEquals("Bob", JsonPath.read(away, "$.data.player"));
+        assertEquals("AWAY", JsonPath.read(away, "$.data.presence"));
     }
 
     @Test

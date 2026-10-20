@@ -35,11 +35,18 @@ class GameSessionPresenceTest {
 
     @BeforeEach
     void setUp() {
-        // Un faux canal de messages qui garde tout sans rien envoyer : pas besoin de vrai WebSocket ici
         sentMessages = new ArrayList<>();
+        session = newSession();
+        // Comme après la pause de départ : les changements de présence sont diffusés
+        session.announcePresences();
+    }
+
+    /** Une session à deux joueurs, pas encore lancée, dont les messages sont gardés dans sentMessages. */
+    private GameSession newSession() {
+        // Un faux canal de messages qui garde tout sans rien envoyer : pas besoin de vrai WebSocket ici
         SimpMessagingTemplate messaging = new SimpMessagingTemplate((message, timeout) -> sentMessages.add(message));
 
-        session = new GameSession(
+        return new GameSession(
                 1L,
                 "Table de test",
                 List.of(new Seat(LOUIS, "Louis"), new Seat(ALICE, "Alice")),
@@ -148,5 +155,34 @@ class GameSessionPresenceTest {
                 .map(message -> ((GameMessage) message.getPayload()).data().get("presence"))
                 .toList();
         assertEquals(List.of("DISCONNECTED", "AWAY", "PRESENT"), presences);
+    }
+
+    // ------------------------------------------------------------------
+    // Pause de départ : les navigateurs ne sont pas encore abonnés
+
+    @Test
+    @DisplayName("Avant la pause de départ, un changement est noté sans être diffusé, puis annoncé")
+    void presenceIsAnnouncedAfterTheStartPause() {
+        GameSession fresh = newSession();
+
+        fresh.updatePresence(LOUIS, Presence.DISCONNECTED);
+        assertEquals(Presence.DISCONNECTED, fresh.presenceOf(LOUIS)); // noté…
+        assertTrue(sentMessages.isEmpty());                            // …mais pas diffusé
+
+        fresh.announcePresences();
+        assertEquals(1, sentMessages.size());
+        assertEquals(new GameMessage("PLAYER_PRESENCE", Map.of("player", "Louis", "presence", "DISCONNECTED")),
+                sentMessages.getFirst().getPayload());
+
+        // Ensuite, chaque changement est diffusé normalement
+        fresh.updatePresence(LOUIS, Presence.AWAY);
+        assertEquals(2, sentMessages.size());
+    }
+
+    @Test
+    @DisplayName("Si tout le monde est là, l'annonce de départ n'envoie rien")
+    void nothingToAnnounceWhenEveryoneIsPresent() {
+        newSession().announcePresences();
+        assertTrue(sentMessages.isEmpty());
     }
 }

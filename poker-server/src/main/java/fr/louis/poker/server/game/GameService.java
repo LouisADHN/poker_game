@@ -3,12 +3,15 @@ package fr.louis.poker.server.game;
 import fr.louis.poker.action.Action;
 import fr.louis.poker.server.lobby.LobbyConflictException;
 import fr.louis.poker.server.lobby.LobbyService;
+import fr.louis.poker.server.lobby.Seat;
 import fr.louis.poker.server.lobby.TableView;
 import fr.louis.poker.server.stats.GameResultService;
 import jakarta.annotation.PreDestroy;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -28,15 +31,18 @@ public class GameService {
     private final SimpMessagingTemplate messaging;
     private final GameProperties properties;
     private final GameResultService gameResultService;
+    private final ApplicationEventPublisher events;
 
     public GameService(LobbyService lobbyService,
                        SimpMessagingTemplate messaging,
                        GameProperties properties,
-                       GameResultService gameResultService) {
+                       GameResultService gameResultService,
+                       ApplicationEventPublisher events) {
         this.lobbyService = lobbyService;
         this.messaging = messaging;
         this.properties = properties;
         this.gameResultService = gameResultService;
+        this.events = events;
     }
 
     /** Lance la partie d'une table. Seul le créateur de la table peut le faire. */
@@ -56,6 +62,12 @@ public class GameService {
 
         // Enregistrée AVANT le démarrage, pour accepter les actions dès le premier tour
         sessions.put(tableId, session);
+
+        // Après le put (la session doit être trouvable), avant le start (rien n'est encore joué) :
+        // le ConnectionRegistry signale les joueurs déjà déconnectés
+        List<Long> userIds = table.players().stream().map(Seat::userId).toList();
+        events.publishEvent(new GameStartedEvent(tableId, userIds));
+
         session.start();
         return table;
     }

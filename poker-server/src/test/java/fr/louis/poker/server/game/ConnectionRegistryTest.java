@@ -158,4 +158,45 @@ class ConnectionRegistryTest {
                 "Un ancien délai de grâce a fait passer le joueur absent trop tôt");
         assertNoUpdateFor(GRACE); // et un seul AWAY
     }
+
+    // ------------------------------------------------------------------
+    // Lancement d'une partie
+
+    @Test
+    @DisplayName("Lancement d'une partie avec un joueur déjà parti : déconnecté, puis absent après le délai")
+    void playerAlreadyGoneWhenGameStarts() throws Exception {
+        long startedAt = System.currentTimeMillis();
+        registry.gameStarted(List.of(LOUIS)); // Louis n'a aucune connexion ouverte
+
+        assertEquals("1:DISCONNECTED", nextUpdate());
+        assertEquals("1:AWAY", nextUpdate());
+        assertTrue(System.currentTimeMillis() - startedAt >= GRACE.toMillis());
+    }
+
+    @Test
+    @DisplayName("Lancement d'une partie : un joueur connecté n'est pas touché")
+    void connectedPlayerIsUntouchedWhenGameStarts() throws Exception {
+        registry.connected(LOUIS, "s1");
+        nextUpdate();
+
+        registry.gameStarted(List.of(LOUIS));
+
+        assertNoUpdateFor(GRACE.multipliedBy(2));
+    }
+
+    @Test
+    @DisplayName("Lancement pendant un délai de grâce : le délai en cours continue, sans en lancer un second")
+    void gameStartDuringGraceKeepsTheRunningGrace() throws Exception {
+        registry.connected(LOUIS, "s1");
+        nextUpdate();
+        registry.disconnected(LOUIS, "s1");
+        assertEquals("1:DISCONNECTED", nextUpdate());
+
+        Thread.sleep(100);
+        registry.gameStarted(List.of(LOUIS));
+
+        assertEquals("1:DISCONNECTED", nextUpdate()); // annoncé à la nouvelle partie
+        assertEquals("1:AWAY", nextUpdate());
+        assertNoUpdateFor(GRACE); // un seul délai : un seul AWAY
+    }
 }

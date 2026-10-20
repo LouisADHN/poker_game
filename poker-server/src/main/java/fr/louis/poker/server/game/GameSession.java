@@ -71,6 +71,12 @@ public class GameSession {
     private final GameEngine engine;
     private final ResultTracker resultTracker;
 
+    /**
+     * Faux tant que les navigateurs n'ont pas eu le temps de s'abonner à la partie.
+     * Pendant ce temps, les changements de présence sont notés mais pas diffusés (ils seraient perdus) ;
+     * announcePresences() annonce ensuite l'état de chacun. Protégé par le verrou de la session.
+     */
+    private boolean presenceBroadcast = false;
     private volatile boolean running = true;
     private Thread thread;
     private Instant startedAt;
@@ -177,8 +183,23 @@ public class GameSession {
         controllersByUser.get(userId).setAutoPlay(presence.isAutoPlay());
 
         // Envoyé sous le verrou : la table reçoit les changements dans l'ordre où ils ont eu lieu
-        sendToTable(GameMessages.playerPresence(nameByUserId.get(userId), presence));
+        if (presenceBroadcast) {
+            sendToTable(GameMessages.playerPresence(nameByUserId.get(userId), presence));
+        }
         return true;
+    }
+
+    /**
+     * Les navigateurs sont abonnés : annonce les joueurs qui ne sont pas présents,
+     * puis diffuse désormais chaque changement. Appelé par le thread de la table, après la pause de départ.
+     */
+    synchronized void announcePresences() {
+        presenceBroadcast = true;
+        presenceByUser.forEach((userId, presence) -> {
+            if (presence != Presence.PRESENT) {
+                sendToTable(GameMessages.playerPresence(nameByUserId.get(userId), presence));
+            }
+        });
     }
 
     /** @return la présence du joueur, ou null s'il n'est pas à cette table */
@@ -226,6 +247,7 @@ public class GameSession {
         try {
             // Laisse aux navigateurs le temps de s'abonner aux messages de la partie
             Thread.sleep(pauseBetweenHands);
+            announcePresences();
 
             boolean abandoned = false;
             while (running && !engine.isGameOver()) {
