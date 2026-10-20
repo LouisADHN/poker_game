@@ -282,6 +282,25 @@ class GamePlayTest {
     }
 
     @Test
+    @DisplayName("Les messages de la table arrivent dans l'ordre d'envoi, main après main")
+    void tableMessagesKeepTheirOrder() throws Exception {
+        // Chacun se couche dès qu'il parle : des mains très courtes, envoyées en rafale
+        alice.strategy = yourTurn -> "{\"type\": \"FOLD\"}";
+        bob.strategy = yourTurn -> "{\"type\": \"FOLD\"}";
+
+        startGame(alice.token);
+
+        // Un désordre ne se produit pas à chaque fois : plusieurs mains multiplient les chances de le voir
+        List<String> expected = List.of("HAND_STARTED", "BLIND_POSTED", "BLIND_POSTED",
+                "PLAYER_ACTED", "POT_WON", "HAND_ENDED");
+        for (int hand = 1; hand <= 10; hand++) {
+            List<String> seen = new ArrayList<>();
+            waitFor(alice.tableMessages, "HAND_ENDED", seen);
+            assertEquals(expected, seen.stream().map(GamePlayTest::typeOf).toList(), "Main n°" + hand);
+        }
+    }
+
+    @Test
     @DisplayName("Une action hors de son tour renvoie une erreur privée")
     void actionOutsideTurnIsRejected() throws Exception {
         startGame(alice.token);
