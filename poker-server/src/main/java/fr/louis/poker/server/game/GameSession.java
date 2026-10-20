@@ -52,6 +52,7 @@ public class GameSession {
     private final List<Player> players = new ArrayList<>();
     private final Map<Long, RemotePlayerController> controllersByUser = new HashMap<>();
     private final Map<String, Long> userIdByName = new HashMap<>();
+    private final Map<Long, Presence> presenceByUser = new HashMap<>();
     private final GameEngine engine;
     private final ResultTracker resultTracker;
 
@@ -94,6 +95,7 @@ public class GameSession {
             controllers.put(player, controller);
             controllersByUser.put(seat.userId(), controller);
             userIdByName.put(seat.username(), seat.userId());
+            presenceByUser.put(seat.userId(), Presence.PRESENT);
         }
 
         // SecureRandom : un mélange imprévisible, impossible à deviner à partir des mains précédentes
@@ -135,6 +137,39 @@ public class GameSession {
     public boolean submit(Long userId, Action action) {
         RemotePlayerController controller = controllersByUser.get(userId);
         return controller != null && controller.submit(action);
+    }
+
+    // ------------------------------------------------------------------
+    // Présence des joueurs
+
+    /**
+     * Change la présence d'un joueur, et active ou coupe son jeu automatique en conséquence.
+     * Appelé par d'autres threads que celui de la table.
+     *
+     * LEFT est définitif : une fois parti, le joueur ne peut plus changer d'état.
+     *
+     * @return true si la présence a changé ; false si le joueur n'est pas à cette table,
+     *         s'il avait déjà cette présence, ou s'il a quitté la partie
+     */
+    public synchronized boolean updatePresence(Long userId, Presence presence) {
+        Presence current = presenceByUser.get(userId);
+        if (current == null || current == presence || current == Presence.LEFT) {
+            return false;
+        }
+
+        presenceByUser.put(userId, presence);
+        controllersByUser.get(userId).setAutoPlay(presence.isAutoPlay());
+        return true;
+    }
+
+    /** @return la présence du joueur, ou null s'il n'est pas à cette table */
+    public synchronized Presence presenceOf(Long userId) {
+        return presenceByUser.get(userId);
+    }
+
+    /** Réservé aux tests : le contrôleur d'un joueur. */
+    RemotePlayerController controllerOf(Long userId) {
+        return controllersByUser.get(userId);
     }
 
     // ------------------------------------------------------------------
