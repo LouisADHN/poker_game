@@ -53,7 +53,8 @@ import static org.junit.jupiter.api.Assertions.*;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
                 "poker.game.turn-timeout=1s",
-                "poker.game.pause-between-hands=300ms"
+                "poker.game.pause-between-hands=300ms",
+                "poker.game.reconnect-grace=500ms"
         })
 @Import(TestcontainersConfiguration.class)
 class GamePlayTest {
@@ -353,6 +354,32 @@ class GamePlayTest {
         startGame(alice.token);
 
         assertEquals(409, leaveGame(carolToken).statusCode());
+    }
+
+    @Test
+    @DisplayName("Un joueur qui se déconnecte est annoncé déconnecté, puis absent, puis présent à son retour")
+    void disconnectionIsAnnouncedToTheTable() throws Exception {
+        // Aucune stratégie : Alice reste connectée mais ne joue pas (couchée à chaque fin de délai)
+        startGame(alice.token);
+        waitFor(alice.tableMessages, "HAND_STARTED", new ArrayList<>());
+
+        // Bob ferme sa connexion, comme un onglet fermé
+        bob.session.disconnect();
+
+        String disconnected = waitFor(alice.tableMessages, "PLAYER_PRESENCE", new ArrayList<>());
+        assertEquals("Bob", JsonPath.read(disconnected, "$.data.player"));
+        assertEquals("DISCONNECTED", JsonPath.read(disconnected, "$.data.presence"));
+
+        // Le délai de grâce (500 ms ici) s'écoule : Bob passe en jeu automatique
+        String away = waitFor(alice.tableMessages, "PLAYER_PRESENCE", new ArrayList<>());
+        assertEquals("Bob", JsonPath.read(away, "$.data.player"));
+        assertEquals("AWAY", JsonPath.read(away, "$.data.presence"));
+
+        // Bob revient : nouvelle connexion
+        bob.connect();
+        String back = waitFor(alice.tableMessages, "PLAYER_PRESENCE", new ArrayList<>());
+        assertEquals("Bob", JsonPath.read(back, "$.data.player"));
+        assertEquals("PRESENT", JsonPath.read(back, "$.data.presence"));
     }
 
     @Test
