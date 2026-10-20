@@ -74,6 +74,26 @@ public class GameService {
     }
 
     /**
+     * Un joueur quitte la partie en cours, définitivement.
+     * Il passe en jeu automatique jusqu'à la fin, et il est libéré dans le lobby :
+     * il peut rejoindre ou créer une autre table sans attendre la fin de cette partie.
+     *
+     * Quitter deux fois ne pose pas de problème : la seconde fois, rien ne change.
+     */
+    public void leaveGame(long tableId, Long userId) {
+        GameSession session = sessions.get(tableId);
+        if (session == null) {
+            throw new LobbyConflictException("Aucune partie en cours à cette table");
+        }
+        if (session.presenceOf(userId) == null) {
+            throw new LobbyConflictException("Tu ne joues pas à cette table");
+        }
+
+        session.updatePresence(userId, Presence.LEFT);
+        lobbyService.releasePlayer(tableId, userId);
+    }
+
+    /**
      * Change la présence d'un joueur dans la partie où il joue, s'il en a une.
      * Appelé par le ConnectionRegistry (connexion, déconnexion, fin du délai de grâce).
      *

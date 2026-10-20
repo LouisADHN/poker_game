@@ -166,8 +166,17 @@ class GamePlayTest {
     }
 
     private HttpResponse<String> startGame(String token) throws Exception {
+        return postToTable("start", token);
+    }
+
+    private HttpResponse<String> leaveGame(String token) throws Exception {
+        return postToTable("leave-game", token);
+    }
+
+    /** POST /api/tables/{tableId}/{action}, au nom du joueur dont on donne le jeton. */
+    private HttpResponse<String> postToTable(String action, String token) throws Exception {
         HttpRequest request = HttpRequest.newBuilder(
-                        URI.create("http://localhost:" + port + "/api/tables/" + tableId + "/start"))
+                        URI.create("http://localhost:" + port + "/api/tables/" + tableId + "/" + action))
                 .header("Authorization", "Bearer " + token)
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build();
@@ -293,6 +302,57 @@ class GamePlayTest {
         String acted = waitFor(alice.tableMessages, "PLAYER_ACTED", new ArrayList<>());
         assertEquals("Alice", JsonPath.read(acted, "$.data.player"));
         assertEquals("FOLD", JsonPath.read(acted, "$.data.action.type")); // face à la big blind : fold
+    }
+
+    @Test
+    @DisplayName("Quitter la partie : la table est prévenue, la partie à deux est abandonnée, le joueur est libéré")
+    void leavingTheGame() throws Exception {
+        startGame(alice.token);
+        waitFor(alice.tableMessages, "HAND_STARTED", new ArrayList<>());
+
+        assertEquals(204, leaveGame(bob.token).statusCode());
+
+        String left = waitFor(alice.tableMessages, "PLAYER_PRESENCE", new ArrayList<>());
+        assertEquals("Bob", JsonPath.read(left, "$.data.player"));
+        assertEquals("LEFT", JsonPath.read(left, "$.data.presence"));
+
+        // Bob est libre : il peut créer une autre table, sans attendre la fin de la partie
+        TableView bobTable = lobbyService.create(new Seat(bobAccount.getId(), "Bob"),
+                new CreateTableRequest("Nouvelle table", 10, 20, 200, 2));
+        try {
+            // Il ne reste qu'un joueur : la partie s'arrête à la fin de la main en cours
+            String gameOver = waitFor(alice.tableMessages, "GAME_OVER", new ArrayList<>());
+            assertEquals("ABANDONED", JsonPath.read(gameOver, "$.data.reason"));
+
+            long deadline = System.currentTimeMillis() + 5000;
+            while (gameService.isRunning(tableId) && System.currentTimeMillis() < deadline) {
+                Thread.sleep(50);
+            }
+            assertFalse(gameService.isRunning(tableId));
+
+            // La fin de l'ancienne partie n'a pas sorti Bob de sa nouvelle table
+            assertTrue(lobbyService.get(bobTable.id()).players().stream()
+                    .anyMatch(seat -> seat.userId().equals(bobAccount.getId())));
+        } finally {
+            quietly(() -> lobbyService.leave(bobTable.id(), bobAccount.getId()));
+        }
+    }
+
+    @Test
+    @DisplayName("Quitter une partie qui n'a pas commencé renvoie 409")
+    void leavingWithoutGameIsRejected() throws Exception {
+        assertEquals(409, leaveGame(bob.token).statusCode());
+    }
+
+    @Test
+    @DisplayName("Un joueur qui n'est pas à la table ne peut pas quitter sa partie")
+    void strangerCannotLeave() throws Exception {
+        UserAccount carol = userService.register("Carol", "motdepasse123");
+        String carolToken = tokenService.issue(carol).value();
+
+        startGame(alice.token);
+
+        assertEquals(409, leaveGame(carolToken).statusCode());
     }
 
     @Test

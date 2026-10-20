@@ -140,13 +140,23 @@ public class LobbyService {
         return table.toView(); // construite APRÈS la modification : statut PLAYING
     }
 
+    /**
+     * Libère un joueur qui a quitté une partie en cours : il peut de nouveau s'asseoir à une table.
+     * Sa place reste à la table jusqu'à la fin de la partie (le moteur continue de jouer pour lui).
+     */
+    public synchronized void releasePlayer(long tableId, Long userId) {
+        tableByUser.remove(userId, tableId);
+    }
+
     public synchronized void endGame(long tableId) {
         LobbyTable table = tables.remove(tableId);
         if (table == null) {
             return; // déjà fermée
         }
         for (Seat seat : table.toView().players()) {
-            tableByUser.remove(seat.userId());
+            // remove(clé, valeur) : seulement s'il est encore inscrit à CETTE table.
+            // Un joueur parti en cours de partie a pu s'asseoir ailleurs depuis : on ne touche pas à sa nouvelle table.
+            tableByUser.remove(seat.userId(), tableId);
         }
         publish(table); // la table n'est plus dans la map : seule la liste est diffusée
     }

@@ -1,12 +1,10 @@
 package fr.louis.poker.server.game;
 
 import fr.louis.poker.server.lobby.TableView;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/tables")
@@ -21,5 +19,12 @@ public class GameController {
     @PostMapping("/{id}/start")
     public TableView start(@AuthenticationPrincipal Jwt jwt, @PathVariable long id) {
         return gameService.start(id, Long.valueOf(jwt.getSubject()));
+    }
+
+    /** Quitter la partie en cours (bouton « Quitter la partie »). 204 si c'est fait, 409 sinon. */
+    @PostMapping("/{id}/leave-game")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void leaveGame(@AuthenticationPrincipal Jwt jwt, @PathVariable long id) {
+        gameService.leaveGame(id, Long.valueOf(jwt.getSubject()));
     }
 }
