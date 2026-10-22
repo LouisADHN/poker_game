@@ -123,6 +123,8 @@ export const useGameStore = defineStore('game', () => {
   const turnDeadline = ref<number | null>(null)
   /** Délai complet d'un tour, envoyé par le serveur : sert à dessiner la jauge */
   const turnTimeoutMs = ref(DEFAULT_TURN_TIMEOUT_MS)
+  /** Vrai si je regarde la partie sans y jouer (indiqué par le serveur dans GAME_STATE) */
+  const spectator = ref(false)
   /** Historique de la partie, le plus récent en premier */
   const log = ref<string[]>([])
   /** Classement final, non null quand la partie est terminée */
@@ -169,6 +171,7 @@ export const useGameStore = defineStore('game', () => {
     turn.value = null
     turnDeadline.value = null
     turnTimeoutMs.value = DEFAULT_TURN_TIMEOUT_MS
+    spectator.value = false
     lastSeq = 0
     syncPending = true
     log.value = []
@@ -275,6 +278,7 @@ export const useGameStore = defineStore('game', () => {
   /** Remplace tout l'état de la partie par celui envoyé par le serveur (message GAME_STATE). */
   function applyState(state: GameState): void {
     const { table } = state
+    spectator.value = state.spectator
     handNumber.value = table.handNumber
     dealer.value = table.dealer
     board.value = table.board
@@ -473,6 +477,7 @@ export const useGameStore = defineStore('game', () => {
     turn,
     turnDeadline,
     turnTimeoutMs,
+    spectator,
     log,
     standings,
     endReason,

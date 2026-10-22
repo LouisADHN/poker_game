@@ -150,6 +150,8 @@ export interface TableSnapshot {
 export interface GameState {
   /** Numéro du dernier message public déjà inclus dans cet état */
   seq: number
+  /** Vrai si je ne joue pasà cette table */
+  spectator: boolean
   table: TableSnapshot
   /** Présence de chaque joueur, par pseudo */
   presences: Record<string, Presence>

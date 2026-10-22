@@ -158,7 +158,9 @@ function backToLobby() {
 const leaving = ref(false)
 
 /** Le bouton n'a de sens que pendant la partie : une fois la table chargée, et avant la fin */
-const canLeave = computed(() => game.tableId !== null && game.standings === null)
+const canLeave = computed(
+  () => game.tableId !== null && game.standings === null && !game.spectator,
+)
 
 async function leave() {
   const confirmed = window.confirm(
@@ -204,6 +206,10 @@ const gameOverTitle = computed(() =>
       <header class="game-header">
         <h1>{{ game.tableName || 'Table' }}</h1>
         <p>{{ game.handNumber > 0 ? `Main n°${game.handNumber}` : 'La partie va commencer…' }}</p>
+        <template v-if="game.spectator">
+          <p class="spectator-badge">Mode spectateur</p>
+          <RouterLink :to="{ name: 'lobby' }" class="back-link">Retour au lobby</RouterLink>
+        </template>
         <button
           v-if="canLeave"
           type="button"
@@ -312,6 +318,7 @@ const gameOverTitle = computed(() =>
 
       <!-- Mes actions : la zone est toujours présente, pour que la mise en page ne saute pas -->
       <section
+        v-if="!game.spectator"
         class="action-bar"
         :class="{ 'action-bar--active': game.turn }"
         aria-labelledby="actions-title"
@@ -451,6 +458,22 @@ const gameOverTitle = computed(() =>
 }
 
 .leave-button {
+  margin-top: var(--space-2);
+}
+
+/* Plus spécifique que ".game-header p" : le badge garde une couleur bien contrastée */
+.game-header .spectator-badge {
+  display: inline-block;
+  margin-top: var(--space-2);
+  padding: 0.1rem 0.6rem;
+  border: 1px solid var(--brass);
+  border-radius: 999px;
+  color: var(--paper);
+  font-weight: 700;
+}
+
+.back-link {
+  display: block;
   margin-top: var(--space-2);
 }
 

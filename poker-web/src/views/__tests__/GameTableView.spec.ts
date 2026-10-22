@@ -127,4 +127,56 @@ describe('GameTableView', () => {
 
     expect(wrapper.find('#game-over-title').text()).toBe('Partie terminée')
   })
+
+  it('en spectateur : badge, retour au lobby, ni actions ni bouton « Quitter »', async () => {
+    const { wrapper, game } = await mountTable()
+
+    game.handle({
+      type: 'GAME_STATE',
+      data: {
+        seq: 3,
+        spectator: true,
+        table: {
+          handNumber: 1,
+          dealer: 'Alice',
+          street: 'PREFLOP',
+          board: [],
+          pot: 30,
+          players: [
+            {
+              name: 'Alice',
+              chips: 990,
+              streetBet: 10,
+              status: 'ACTIVE',
+              lastAction: null,
+              revealedCards: null,
+              category: null,
+            },
+            {
+              name: 'Bob',
+              chips: 980,
+              streetBet: 20,
+              status: 'ACTIVE',
+              lastAction: null,
+              revealedCards: null,
+              category: null,
+            },
+          ],
+        },
+        presences: { Alice: 'PRESENT', Bob: 'PRESENT' },
+        holeCards: [],
+        yourTurn: null,
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.find('.spectator-badge').text()).toBe('Mode spectateur')
+    expect(wrapper.find('.back-link').attributes('href')).toBe('/')
+    expect(wrapper.find('.action-bar').exists()).toBe(false)
+    expect(wrapper.find('.leave-button').exists()).toBe(false)
+    // Les deux joueurs sont en main : on ne voit que le dos de leurs cartes
+    for (const seat of wrapper.findAll('.seat')) {
+      expect(seat.findAll('.playing-card.back')).toHaveLength(2)
+    }
+  })
 })

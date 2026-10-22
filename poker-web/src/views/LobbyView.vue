@@ -63,6 +63,11 @@ function isMine(table: TableView): boolean {
   return table.id === lobby.myTable?.id
 }
 
+/** On peut regarder une partie en cours, à une table où l'on n'est pas assis. */
+function canWatch(table: TableView): boolean {
+  return table.status === 'PLAYING' && !isMine(table)
+}
+
 function playersText(table: TableView): string {
   return `${table.players.length}/${table.settings.maxPlayers} joueurs`
 }
@@ -168,6 +173,15 @@ function playersText(table: TableView): string {
             >
               Rejoindre
             </button>
+            <!-- Un lien et pas un bouton : il mène à une autre page (et peut s'ouvrir dans un onglet) -->
+            <RouterLink
+              v-if="canWatch(table)"
+              :to="{ name: 'game', params: { id: table.id } }"
+              class="watch-link"
+              :aria-label="`Regarder la partie de la table ${table.name}`"
+            >
+              Regarder
+            </RouterLink>
           </li>
         </ul>
       </section>
@@ -321,6 +335,12 @@ function playersText(table: TableView): string {
 .status--playing {
   background: rgb(212 175 90 / 0.15);
   color: var(--brass);
+}
+
+/* Le lien « Regarder » : une zone cliquable confortable, même au doigt */
+.watch-link {
+  padding: 0.35rem 0.5rem;
+  font-weight: 700;
 }
 
 /* Téléphone : les deux colonnes s'empilent */

@@ -190,6 +190,7 @@ describe('useGameStore', () => {
   function gameState(overrides: Partial<GameState> = {}): GameState {
     return {
       seq: 10,
+      spectator: false,
       table: {
         handNumber: 3,
         dealer: 'Bob',
