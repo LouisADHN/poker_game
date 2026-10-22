@@ -16,11 +16,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Consumer;
 
 /**
@@ -366,12 +362,50 @@ public class GameSession {
         messaging.convertAndSend(gameTopic(tableId), message, Map.of(SEQ_HEADER, seq));
     }
 
+    /**
+     * Envoie à un joueur l'état complet de la partie, en message privé GAME_STATE :
+     * la photographie publique et son numéro, la présence de chacun, ses cartes et son tour en attente.
+     *
+     * Tout est lu ET envoyé sous le verrou de la session. Aucun autre message de la partie ne peut donc
+     * partir entre la photographie et l'envoi : pour ce joueur, tout ce qui arrive avant GAME_STATE
+     * y est déjà inclus, tout ce qui arrive après est plus récent.
+     *
+     * @return false si le joueur n'est pas à cette table
+     */
+    synchronized boolean sendStateTo(Long userId) {
+        RemotePlayerController controller = controllersByUser.get(userId);
+        if (controller == null) {
+            return false;
+        }
+
+        Map<String, String> presences = new LinkedHashMap<>();
+        presenceByUser.forEach((id, presence) -> presences.put(nameByUserId.get(id), presence.name()));
+
+        // LinkedHashMap et pas Map.of : "yourTurn" peut valoir null, ce que Map.of refuse
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("seq", seq);
+        data.put("table", tableState.snapshot());
+        data.put("presences", presences);
+        data.put("holeCards", tableState.holeCardsOf(nameByUserId.get(userId)));
+        data.put("yourTurn", controller.pendingTurn().map(GameMessage::data).orElse(null));
+
+        sendToUser(userId, new GameMessage("GAME_STATE", data));
+        return true;
+    }
+
     /** L'état public de la table et le numéro du dernier message public qu'il inclut, lus ensemble. */
     synchronized PublicView publicView() {
         return new PublicView(seq, tableState.snapshot());
     }
 
-    private void sendToUser(Long userId, GameMessage message) {
+    /**
+     * Envoie un message privé à un joueur.
+     *
+     * synchronized, comme sendToTable : TOUS les messages de la partie (publics et privés,
+     * GAME_STATE compris) partent ainsi l'un après l'autre, dans un ordre unique,
+     * que le broker conserve jusqu'au navigateur.
+     */
+    private synchronized void sendToUser(Long userId, GameMessage message) {
         // Le "user" d'une connexion WebSocket est le subject du jeton : l'identifiant en texte
         messaging.convertAndSendToUser(String.valueOf(userId), PRIVATE_QUEUE, message);
     }

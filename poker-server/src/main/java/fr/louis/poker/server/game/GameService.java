@@ -106,6 +106,20 @@ public class GameService {
     }
 
     /**
+     * Envoie à un joueur l'état complet de la partie de sa table (message privé GAME_STATE).
+     * Appelé quand son navigateur (re)charge la page ou se reconnecte.
+     */
+    public void sendStateTo(long tableId, Long userId) {
+        GameSession session = sessions.get(tableId);
+        if (session == null) {
+            throw new LobbyConflictException("Aucune partie en cours à cette table");
+        }
+        if (!session.sendStateTo(userId)) {
+            throw new LobbyConflictException("Tu ne joues pas à cette table");
+        }
+    }
+
+    /**
      * Change la présence d'un joueur dans la partie où il joue, s'il en a une.
      * Appelé par le ConnectionRegistry (connexion, déconnexion, fin du délai de grâce).
      *

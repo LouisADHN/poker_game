@@ -33,6 +33,20 @@ public class GameWsController {
         }
     }
 
+    /**
+     * Le navigateur demande l'état complet de la partie : au chargement de la page,
+     * et après chaque reconnexion. La réponse arrive en message privé GAME_STATE.
+     */
+    @MessageMapping("/tables/{tableId}/sync")
+    public void sync(@DestinationVariable long tableId, Principal principal) {
+        Long userId = Long.valueOf(principal.getName());
+        try {
+            gameService.sendStateTo(tableId, userId);
+        } catch (LobbyConflictException e) {
+            sendError(principal, e.getMessage());
+        }
+    }
+
     private void sendError(Principal principal, String text) {
         template.convertAndSendToUser(principal.getName(), GameSession.PRIVATE_QUEUE,
                 new GameMessage("ERROR", Map.of("message", text)));

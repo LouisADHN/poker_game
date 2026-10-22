@@ -121,6 +121,13 @@ class GamePlayTest {
             }));
         }
 
+        /** Demande l'état complet de la partie, comme le navigateur au chargement de la page. */
+        void requestState() {
+            StompHeaders headers = new StompHeaders();
+            headers.setDestination("/app/tables/" + tableId + "/sync");
+            session.send(headers, new byte[0]);
+        }
+
         void sendAction(String actionJson) {
             StompHeaders headers = new StompHeaders();
             headers.setDestination("/app/tables/" + tableId + "/action");
@@ -299,6 +306,50 @@ class GamePlayTest {
             waitFor(alice.tableMessages, "HAND_ENDED", seen);
             assertEquals(expected, seen.stream().map(GamePlayTest::typeOf).toList(), "Main n°" + hand);
         }
+    }
+
+    @Test
+    @DisplayName("Un joueur qui redemande l'état reçoit GAME_STATE : ses cartes, jamais celles des autres")
+    void syncSendsTheFullState() throws Exception {
+        // Personne ne joue : Alice (small blind) a la main pendant 1 s, le temps de faire la demande
+        startGame(alice.token);
+        String bobCards = waitFor(bob.privateMessages, "HOLE_CARDS", new ArrayList<>());
+        String aliceCards = waitFor(alice.privateMessages, "HOLE_CARDS", new ArrayList<>());
+
+        bob.requestState();
+        String state = waitFor(bob.privateMessages, "GAME_STATE", new ArrayList<>());
+
+        assertEquals(1, (int) JsonPath.read(state, "$.data.table.handNumber"));
+        assertEquals("PREFLOP", JsonPath.read(state, "$.data.table.street"));
+        assertTrue(((Number) JsonPath.read(state, "$.data.seq")).longValue() > 0);
+        assertEquals("PRESENT", JsonPath.read(state, "$.data.presences.Bob"));
+        assertEquals(JsonPath.<List<String>>read(bobCards, "$.data.cards"), JsonPath.read(state, "$.data.holeCards"));
+        for (String card : JsonPath.<List<String>>read(aliceCards, "$.data.cards")) {
+            assertFalse(state.contains("\"" + card + "\""), "Une carte d'Alice est dans l'état envoyé à Bob : " + card);
+        }
+    }
+
+    @Test
+    @DisplayName("Demander l'état sans partie en cours renvoie une erreur privée")
+    void syncWithoutGameIsRejected() throws Exception {
+        bob.requestState();
+
+        String error = waitFor(bob.privateMessages, "ERROR", new ArrayList<>());
+        assertEquals("Aucune partie en cours à cette table", JsonPath.read(error, "$.data.message"));
+    }
+
+    @Test
+    @DisplayName("Un joueur qui n'est pas à la table ne reçoit pas son état")
+    void strangerCannotSync() throws Exception {
+        UserAccount carolAccount = userService.register("Carol", "motdepasse123");
+        TestPlayer carol = new TestPlayer("Carol", tokenService.issue(carolAccount).value());
+        carol.connect();
+        startGame(alice.token);
+
+        carol.requestState();
+
+        String error = waitFor(carol.privateMessages, "ERROR", new ArrayList<>());
+        assertEquals("Tu ne joues pas à cette table", JsonPath.read(error, "$.data.message"));
     }
 
     @Test

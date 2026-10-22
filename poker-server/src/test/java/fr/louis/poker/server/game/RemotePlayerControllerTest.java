@@ -205,4 +205,77 @@ class RemotePlayerControllerTest {
         assertTrue(controller.submit(new Action.Fold()));
         assertEquals(new Action.Fold(), second.get(5, TimeUnit.SECONDS));
     }
+
+    // ------------------------------------------------------------------
+    // Tour en attente (pour un joueur qui revient)
+
+    @Test
+    @DisplayName("Le YOUR_TURN envoyé indique tout le délai comme temps restant")
+    void yourTurnCarriesTheFullTimeout() throws Exception {
+        RemotePlayerController controller = controller(LONG_TIMEOUT);
+        CompletableFuture.runAsync(() -> controller.decide(sampleView()));
+
+        GameMessage yourTurn = sentMessages.poll(5, TimeUnit.SECONDS);
+        assertNotNull(yourTurn);
+        assertEquals(LONG_TIMEOUT.toMillis(), yourTurn.data().get("timeLeftMs"));
+        assertEquals(LONG_TIMEOUT.toMillis(), yourTurn.data().get("turnTimeoutMs"));
+        controller.submit(new Action.Fold());
+    }
+
+    @Test
+    @DisplayName("Hors de son tour, il n'y a pas de tour en attente")
+    void noPendingTurnOutsideTurn() {
+        assertTrue(controller(LONG_TIMEOUT).pendingTurn().isEmpty());
+    }
+
+    @Test
+    @DisplayName("Pendant son tour, le tour en attente donne la situation et le temps qui reste vraiment")
+    void pendingTurnDuringTurn() throws Exception {
+        RemotePlayerController controller = controller(LONG_TIMEOUT);
+        CompletableFuture<Action> decision = startDecision(controller);
+
+        Thread.sleep(300); // le joueur « revient » 300 ms après le début de son tour
+
+        GameMessage pending = controller.pendingTurn().orElseThrow();
+        assertEquals("YOUR_TURN", pending.type());
+        assertEquals(List.of("As", "Kd"), pending.data().get("holeCards"));
+        long timeLeft = (long) pending.data().get("timeLeftMs");
+        assertTrue(timeLeft <= LONG_TIMEOUT.toMillis() - 300, "Temps restant trop grand : " + timeLeft);
+        assertTrue(timeLeft > 0, "Temps restant épuisé trop tôt : " + timeLeft);
+
+        controller.submit(new Action.Call());
+        decision.get(5, TimeUnit.SECONDS);
+    }
+
+    @Test
+    @DisplayName("Une fois l'action jouée, il n'y a plus de tour en attente")
+    void noPendingTurnAfterAction() throws Exception {
+        RemotePlayerController controller = controller(LONG_TIMEOUT);
+        CompletableFuture<Action> decision = startDecision(controller);
+        controller.submit(new Action.Call());
+        decision.get(5, TimeUnit.SECONDS);
+
+        assertTrue(controller.pendingTurn().isEmpty());
+    }
+
+    @Test
+    @DisplayName("Une fois le délai écoulé, il n'y a plus de tour en attente")
+    void noPendingTurnAfterTimeout() throws Exception {
+        RemotePlayerController controller = controller(SHORT_TIMEOUT);
+        CompletableFuture<Action> decision = startDecision(controller);
+        decision.get(5, TimeUnit.SECONDS);
+
+        assertTrue(controller.pendingTurn().isEmpty());
+    }
+
+    @Test
+    @DisplayName("En jeu automatique, il n'y a jamais de tour en attente")
+    void noPendingTurnInAutoPlay() throws Exception {
+        RemotePlayerController controller = controller(LONG_TIMEOUT);
+        controller.setAutoPlay(true);
+
+        CompletableFuture.supplyAsync(() -> controller.decide(sampleView())).get(1, TimeUnit.SECONDS);
+
+        assertTrue(controller.pendingTurn().isEmpty());
+    }
 }
