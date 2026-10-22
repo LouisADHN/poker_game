@@ -114,6 +114,49 @@ export interface YourTurn {
   myStreetBet: number
   opponents: OpponentView[]
   legalActions: LegalActions
+  /** Temps qu'il me reste pour jouer, en millisecondes (moins que le délai complet si je reviens en cours de tour) */
+  timeLeftMs: number
+  /** Délai complet d'un tour, en millisecondes : sert à dessiner la jauge */
+  turnTimeoutMs: number
+}
+
+/** TableSnapshot.PlayerSnapshot côté serveur : ce qu'on voit d'un joueur. */
+export interface PlayerSnapshot {
+  name: string
+  chips: number
+  streetBet: number
+  status: PlayerStatus
+  /** Dernière action pendant ce tour d'enchères, ou null */
+  lastAction: ActionPayload | null
+  /** Cartes montrées au showdown, ou null */
+  revealedCards: string[] | null
+  /** Catégorie de la main au showdown ("FULL_HOUSE"…), ou null */
+  category: string | null
+}
+
+/** TableSnapshot côté serveur : la photographie publique de la partie. */
+export interface TableSnapshot {
+  handNumber: number
+  /** null avant la première main */
+  dealer: string | null
+  /** null avant la première main */
+  street: Street | null
+  board: string[]
+  pot: number
+  players: PlayerSnapshot[]
+}
+
+/** Contenu du message GAME_STATE : l'état complet de la partie, vu par moi. */
+export interface GameState {
+  /** Numéro du dernier message public déjà inclus dans cet état */
+  seq: number
+  table: TableSnapshot
+  /** Présence de chaque joueur, par pseudo */
+  presences: Record<string, Presence>
+  /** Mes cartes (liste vide avant la première main) */
+  holeCards: string[]
+  /** Mon tour en cours, ou null si ce n'est pas à moi */
+  yourTurn: YourTurn | null
 }
 
 export interface Standing {
@@ -141,13 +184,14 @@ export type GameMessage =
   | { type: 'HOLE_CARDS'; data: { player: string; cards: string[] } }
   | { type: 'BOARD'; data: { street: Street; board: string[] } }
   | {
-      type: 'PLAYER_ACTED'
-      data: { player: string; action: ActionPayload; streetBet: number; chipsLeft: number }
-    }
+  type: 'PLAYER_ACTED'
+  data: { player: string; action: ActionPayload; streetBet: number; chipsLeft: number }
+}
   | { type: 'HAND_REVEALED'; data: { player: string; cards: string[]; category: string } }
   | { type: 'POT_WON'; data: { player: string; amount: number } }
   | { type: 'HAND_ENDED'; data: { handNumber: number } }
   | { type: 'YOUR_TURN'; data: YourTurn }
+  | { type: 'GAME_STATE'; data: GameState }
   | { type: 'PLAYER_PRESENCE'; data: { player: string; presence: Presence } }
   | { type: 'GAME_OVER'; data: { reason: EndReason; standings: Standing[] } }
   | { type: 'ERROR' | 'GAME_ERROR'; data: { message: string } }

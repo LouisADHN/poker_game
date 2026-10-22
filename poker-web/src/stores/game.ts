@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import {api} from "@/api/http"
-import { connect, publish, subscribe } from '@/api/stomp'
+import { api } from '@/api/http'
+import { connect, onEachConnection, publish, subscribe, type StompHeaders } from '@/api/stomp'
 import type {
   ActionPayload,
   EndReason,
   GameMessage,
+  GameState,
   PlayerStatus,
   Presence,
   Standing,
@@ -31,7 +32,8 @@ export interface PlayerState {
   presence: Presence
 }
 
-export const TURN_SECONDS = 30
+/** Délai d'un tour tant que le serveur ne l'a pas encore indiqué (il l'envoie avec chaque YOUR_TURN) */
+const DEFAULT_TURN_TIMEOUT_MS = 30_000
 
 const CATEGORY_LABELS: Record<string, string> = {
   HIGH_CARD: 'Carte haute',
@@ -119,6 +121,8 @@ export const useGameStore = defineStore('game', () => {
   const turn = ref<YourTurn | null>(null)
   /** Heure limite pour jouer (en millisecondes), pour afficher le compte à rebours */
   const turnDeadline = ref<number | null>(null)
+  /** Délai complet d'un tour, envoyé par le serveur : sert à dessiner la jauge */
+  const turnTimeoutMs = ref(DEFAULT_TURN_TIMEOUT_MS)
   /** Historique de la partie, le plus récent en premier */
   const log = ref<string[]>([])
   /** Classement final, non null quand la partie est terminée */
@@ -128,6 +132,18 @@ export const useGameStore = defineStore('game', () => {
   const error = ref<string | null>(null)
 
   let unsubscribers: (() => void)[] = []
+
+  /**
+   * Numéro du dernier message public de la table pris en compte (en-tête "seq").
+   * Variable simple et pas ref : rien ne l'affiche, Vue n'a pas besoin de la surveiller.
+   */
+  let lastSeq = 0
+  /**
+   * Vrai entre une demande d'état et la réception du GAME_STATE.
+   * Pendant ce temps, les messages publics sont ignorés : ils sont tous inclus dans le GAME_STATE
+   * qui arrive après eux (le serveur envoie tout dans un ordre unique).
+   */
+  let syncPending = true
 
   /** Prépare l'état à partir de la table du lobby, et s'abonne aux messages de la partie. */
   function start(table: TableView): void {
@@ -143,7 +159,7 @@ export const useGameStore = defineStore('game', () => {
       lastAction: null,
       revealedCards: null,
       category: null,
-      presence: "PRESENT",
+      presence: 'PRESENT',
     }))
     board.value = []
     pot.value = 0
@@ -152,6 +168,9 @@ export const useGameStore = defineStore('game', () => {
     handNumber.value = 0
     turn.value = null
     turnDeadline.value = null
+    turnTimeoutMs.value = DEFAULT_TURN_TIMEOUT_MS
+    lastSeq = 0
+    syncPending = true
     log.value = []
     standings.value = null
     endReason.value = null
@@ -162,9 +181,48 @@ export const useGameStore = defineStore('game', () => {
     }
     connect(auth.token)
     unsubscribers = [
-      subscribe<GameMessage>(`/topic/tables/${table.id}/game`, handle),
+      subscribe<GameMessage>(`/topic/tables/${table.id}/game`, receiveTableMessage),
       subscribe<GameMessage>('/user/queue/game', handle),
+      // APRÈS les abonnements : à la connexion (ou tout de suite si elle existe déjà),
+      // puis à chaque reconnexion, on redemande l'état complet de la partie
+      onEachConnection(requestSync),
     ]
+  }
+
+  /** Demande l'état complet de la partie : il arrivera en message privé GAME_STATE. */
+  function requestSync(): void {
+    if (tableId.value === null) {
+      return
+    }
+    syncPending = true
+    try {
+      publish(`/app/tables/${tableId.value}/sync`, {})
+    } catch {
+      // Connexion coupée : la reconnexion redemandera l'état (onEachConnection)
+    }
+  }
+
+  /**
+   * Un message public de la table arrive, avec son numéro dans l'en-tête "seq".
+   * - pendant une demande d'état : ignoré (le GAME_STATE attendu l'inclut déjà) ;
+   * - numéro déjà vu : ignoré (déjà inclus dans le dernier GAME_STATE) ;
+   * - numéro qui saute : un message a été perdu, on redemande l'état complet ;
+   * - sinon : appliqué normalement.
+   */
+  function receiveTableMessage(message: GameMessage, headers: StompHeaders): void {
+    if (syncPending) {
+      return
+    }
+    const seq = Number(headers['seq'])
+    if (seq <= lastSeq) {
+      return
+    }
+    if (seq > lastSeq + 1) {
+      requestSync()
+      return
+    }
+    lastSeq = seq
+    handle(message)
   }
 
   function stop(): void {
@@ -205,6 +263,44 @@ export const useGameStore = defineStore('game', () => {
 
   function addLog(line: string): void {
     log.value = [line, ...log.value].slice(0, 50)
+  }
+
+  /** C'est à moi : affiche mes actions et le compte à rebours, à partir du temps envoyé par le serveur. */
+  function startTurn(data: YourTurn): void {
+    turn.value = data
+    turnDeadline.value = Date.now() + data.timeLeftMs
+    turnTimeoutMs.value = data.turnTimeoutMs
+  }
+
+  /** Remplace tout l'état de la partie par celui envoyé par le serveur (message GAME_STATE). */
+  function applyState(state: GameState): void {
+    const { table } = state
+    handNumber.value = table.handNumber
+    dealer.value = table.dealer
+    board.value = table.board
+    pot.value = table.pot
+    myCards.value = state.holeCards
+    players.value = table.players.map((p) => ({
+      name: p.name,
+      chips: p.chips,
+      streetBet: p.streetBet,
+      status: p.status,
+      lastAction: p.lastAction ? describeAction(p.lastAction) : null,
+      revealedCards: p.revealedCards,
+      category: p.category ? (CATEGORY_LABELS[p.category] ?? p.category) : null,
+      presence: state.presences[p.name] ?? 'PRESENT',
+    }))
+
+    if (state.yourTurn) {
+      startTurn(state.yourTurn)
+    } else {
+      turn.value = null
+      turnDeadline.value = null
+    }
+
+    // Les messages publics suivants reprennent juste après ce numéro
+    lastSeq = state.seq
+    syncPending = false
   }
 
   /**
@@ -314,8 +410,7 @@ export const useGameStore = defineStore('game', () => {
 
       case 'YOUR_TURN': {
         const data = message.data
-        turn.value = data
-        turnDeadline.value = Date.now() + TURN_SECONDS * 1000
+        startTurn(data)
 
         // Le serveur envoie ici l'état exact : on s'en sert pour corriger l'affichage
         pot.value = data.pot
@@ -336,6 +431,10 @@ export const useGameStore = defineStore('game', () => {
         }
         break
       }
+
+      case 'GAME_STATE':
+        applyState(message.data)
+        break
 
       case 'PLAYER_PRESENCE': {
         const { player, presence } = message.data
@@ -373,6 +472,7 @@ export const useGameStore = defineStore('game', () => {
     handNumber,
     turn,
     turnDeadline,
+    turnTimeoutMs,
     log,
     standings,
     endReason,
@@ -383,5 +483,7 @@ export const useGameStore = defineStore('game', () => {
     leaveGame,
     /** Exposé pour les tests : applique un message comme s'il venait du serveur. */
     handle,
+    /** Exposé pour les tests : un message public de la table, avec ses en-têtes. */
+    receiveTableMessage,
   }
 })

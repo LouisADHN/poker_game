@@ -4,7 +4,7 @@ import {useRoute, useRouter} from 'vue-router'
 import {api, ApiError} from '@/api/http'
 import type {ActionType, TableView} from '@/api/types'
 import {useAuthStore} from '@/stores/auth'
-import {TURN_SECONDS, describePresence, useGameStore, type PlayerState} from '@/stores/game'
+import {describePresence, useGameStore, type PlayerState} from '@/stores/game'
 import PlayingCard from '@/components/PlayingCard.vue'
 
 const route = useRoute()
@@ -119,7 +119,7 @@ const secondsLeft = computed(() =>
 
 /** Remplissage de la jauge, de 100 % à 0 % */
 const timerPercent = computed(() =>
-  secondsLeft.value === null ? 0 : (secondsLeft.value / TURN_SECONDS) * 100,
+  secondsLeft.value === null ? 0 : ((secondsLeft.value * 1000) / game.turnTimeoutMs) * 100,
 )
 
 const raiseLabel = computed(() => (game.turn?.currentBet === 0 ? 'Miser' : 'Relancer'))
