@@ -47,6 +47,13 @@ Création de tables, parties multijoueurs synchronisées par WebSocket, statisti
 - Cartes privées envoyées **uniquement** à leur propriétaire
 - Table de jeu adaptative : les joueurs sont placés sur une ellipse, toujours vus depuis sa propre place
 
+**Déconnexions et reconnexion**
+- **Reconnexion transparente** : après un rechargement de page ou une coupure réseau, le joueur retrouve immédiatement toute la partie (board, pot, tapis, ses cartes, son tour et le temps qu'il lui reste)
+- Un joueur déconnecté dispose d'un **délai de grâce** (30 s par défaut) pour revenir ; passé ce délai, le serveur joue pour lui (check ou couché) **sans faire attendre la table**
+- Présence de chaque joueur affichée sur sa place : déconnecté, absent, parti
+- Bouton **« Quitter la partie »** : le joueur est libéré tout de suite et peut rejoindre une autre table
+- Une partie qui n'a plus assez de joueurs présents est **abandonnée** et ne compte pas au classement
+
 **Statistiques**
 - Classement général : victoires, taux de victoire, mains jouées et gagnées
 - Statistiques personnelles
@@ -128,10 +135,30 @@ Le moteur attend la décision de chaque joueur de manière **bloquante**, alors 
 - le thread WebSocket y dépose l'action reçue ;
 - une action envoyée hors de son tour est refusée, et ne peut jamais être consommée au tour suivant.
 
+### Reconnexion : un état toujours juste
+
+Le front reconstruit la partie message par message ; un message manqué pendant un rechargement fausserait l'affichage. Le serveur fournit donc, à la demande, une **photographie complète** de la partie :
+
+- une **projection** (`TableState`) rejoue chaque événement du moteur pour tenir à jour un état lisible, sans jamais lire les objets du moteur depuis un autre thread ;
+- chaque message public porte un **numéro de séquence** (en-tête STOMP `seq`) ;
+- tous les envois d'une partie (publics, privés et photographie) passent **sous un même verrou** : pour le joueur, la photographie `GAME_STATE` coupe le flux exactement : tout ce qui arrive avant y est inclus, tout ce qui arrive après est plus récent ;
+- Spring conserve l'ordre des trames dans les deux sens (`setPreservePublishOrder`, `setPreserveReceiveOrder`) ;
+- côté navigateur, l'état est redemandé à chaque connexion ; un message déjà inclus est ignoré, et un numéro qui saute déclenche une nouvelle demande.
+
+La projection est testée **contre le vrai moteur**, sur des milliers d'événements de parties jouées au hasard (graines fixes, donc rejouables) : après chaque événement, tapis, statuts et conservation des jetons doivent concorder.
+
+### Déconnexions
+
+- Un `ConnectionRegistry` suit les **sessions WebSocket** de chaque joueur (plusieurs onglets, rechargement où la nouvelle connexion s'ouvre avant la fermeture de l'ancienne, événement de déconnexion publié deux fois).
+- Chaque délai de grâce porte un **jeton** : un délai annulé ou remplacé ne peut plus agir, même s'il se termine au mauvais moment.
+- Le passage en jeu automatique **réveille** immédiatement le moteur s'il attendait ce joueur.
+- Le lancement d'une partie est annoncé par un événement Spring, ce qui permet de repérer les joueurs déjà partis sans dépendance circulaire entre services.
+
 ### Concurrence
 
 - Le lobby est protégé par un verrou unique : deux joueurs ne peuvent pas prendre la même dernière place, ni un joueur s'asseoir à deux tables. Ces garanties sont vérifiées par des tests lançant **20 threads simultanés**, répétés plusieurs fois.
 - Les tests d'intégration font jouer de vrais clients WebSocket, sur un vrai serveur.
+- La cohérence entre photographie et numéros de séquence est vérifiée par des tests qui interrogent la partie **pendant** qu'elle tourne.
 
 ### Sécurité
 
@@ -183,7 +210,7 @@ poker/
 │       ├── stores/               État partagé (Pinia)
 │       ├── views/                Pages
 │       └── components/           Composants réutilisables
-├── deploy/                       Fichiers de déploiement (Compose, Caddy)
+├── deploy/                       Fichiers de déploiement (Compose, modèle de .env)
 ├── .github/workflows/ci.yml      Intégration continue
 ├── Dockerfile                    Image de production
 └── compose.prod.yaml             Lancement local en configuration de production
@@ -249,6 +276,8 @@ Les tests couvrent notamment :
 - la **sécurité** : jetons expirés ou falsifiés, routes protégées, réponses identiques pour un pseudo inconnu ou un mauvais mot de passe ;
 - la **concurrence** du lobby, avec accès simultanés ;
 - des **parties de bout en bout**, jouées par de vrais clients WebSocket, avec vérification que les cartes privées ne fuient pas ;
+- les **déconnexions** : délai de grâce, jeu automatique, abandon, joueur parti avant le lancement ;
+- la **reconnexion** : projection comparée au moteur, ordre des messages, photographie cohérente avec les numéros de séquence ;
 - les **statistiques**, calculées sur un jeu de parties construit à la main.
 
 ---
@@ -264,6 +293,7 @@ Les tests couvrent notamment :
 | `SPRING_DATASOURCE_USERNAME` / `PASSWORD` | Identifiants de la base | — |
 | `POKER_GAME_TURN_TIMEOUT` | Temps de réflexion par action | `30s` |
 | `POKER_GAME_PAUSE_BETWEEN_HANDS` | Pause entre deux mains | `3s` |
+| `POKER_GAME_RECONNECT_GRACE` | Délai laissé à un joueur déconnecté avant le jeu automatique | `30s` |
 
 Pour générer une clé :
 
@@ -335,6 +365,7 @@ Toutes les routes sauf l'authentification exigent l'en-tête `Authorization: Bea
 | `POST` | `/api/tables/{id}/join` | Rejoindre une table |
 | `POST` | `/api/tables/{id}/leave` | Quitter une table |
 | `POST` | `/api/tables/{id}/start` | Lancer la partie (créateur uniquement) |
+| `POST` | `/api/tables/{id}/leave-game` | Quitter la partie en cours (le serveur joue pour le joueur jusqu'à la fin) |
 
 Les erreurs suivent le format standard **Problem Details** (RFC 9457).
 
@@ -346,11 +377,14 @@ Connexion sur `/ws`, avec le jeton dans l'en-tête `Authorization` de la trame `
 |---|---|---|
 | `/topic/lobby` | serveur → tous | Liste des tables, à chaque changement |
 | `/topic/tables/{id}` | serveur → tous | Détail d'une table, à chaque changement |
-| `/topic/tables/{id}/game` | serveur → table | Déroulement public de la partie |
-| `/user/queue/game` | serveur → joueur | Cartes privées, tour de jeu, erreurs |
+| `/topic/tables/{id}/game` | serveur → table | Déroulement public de la partie, chaque message numéroté (en-tête `seq`) |
+| `/user/queue/game` | serveur → joueur | Cartes privées, tour de jeu, état complet, erreurs |
 | `/app/tables/{id}/action` | joueur → serveur | Action du joueur |
+| `/app/tables/{id}/sync` | joueur → serveur | Demande de l'état complet (réponse : `GAME_STATE`) |
 
-Messages de partie : `HAND_STARTED`, `BLIND_POSTED`, `HOLE_CARDS`, `BOARD`, `PLAYER_ACTED`, `HAND_REVEALED`, `POT_WON`, `HAND_ENDED`, `YOUR_TURN`, `GAME_OVER`, `ERROR`.
+Messages publics : `HAND_STARTED`, `BLIND_POSTED`, `BOARD`, `PLAYER_ACTED`, `HAND_REVEALED`, `POT_WON`, `HAND_ENDED`, `PLAYER_PRESENCE`, `GAME_OVER` (avec son motif, `COMPLETED` ou `ABANDONED`), `GAME_ERROR`.
+
+Messages privés : `HOLE_CARDS`, `YOUR_TURN` (avec le temps restant), `GAME_STATE`, `ERROR`.
 
 Exemple d'action envoyée par le navigateur :
 
@@ -365,13 +399,12 @@ Exemple d'action envoyée par le navigateur :
 **Limites actuelles**
 
 - Les tables et les parties en cours vivent en mémoire : un redémarrage du serveur les interrompt.
-- Un joueur qui recharge la page en pleine main retrouve l'état complet de la table au tour de jeu suivant.
 - Une seule instance du serveur (broker STOMP en mémoire).
 
 **Pistes d'évolution**
 
-- Route renvoyant l'état complet d'une partie, pour une reconnexion instantanée
 - Spectateurs, discussion à la table
+- Mode « local » : un écran partagé affiche la table, les joueurs rejoignent par QR code et jouent depuis leur téléphone, avec ou sans compte
 - Historique détaillé des mains jouées
 - Déploiement continu automatique après chaque version validée
 
