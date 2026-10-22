@@ -22,6 +22,7 @@ import org.springframework.messaging.simp.stomp.StompFrameHandler;
 import org.springframework.messaging.simp.stomp.StompHeaders;
 import org.springframework.messaging.simp.stomp.StompSession;
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
+import org.springframework.messaging.simp.user.SimpUserRegistry;
 import org.springframework.util.MimeTypeUtils;
 import org.springframework.web.socket.WebSocketHttpHeaders;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
@@ -44,7 +45,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Test de bout en bout d'une partie : vrai serveur, vrais clients WebSocket.
- *
+ * <p>
  * Alice crée une table de 2 joueurs, Bob la rejoint, Alice lance la partie.
  * En tête-à-tête, Alice (premier siège) a le bouton à la première main :
  * elle est small blind et parle en premier.
@@ -64,12 +65,20 @@ class GamePlayTest {
     @Value("${local.server.port}")
     private int port;
 
-    @Autowired private UserService userService;
-    @Autowired private UserRepository userRepository;
-    @Autowired private TokenService tokenService;
-    @Autowired private LobbyService lobbyService;
-    @Autowired private GameService gameService;
-    @Autowired private ConnectionRegistry connectionRegistry;
+    @Autowired
+    private UserService userService;
+    @Autowired
+    private UserRepository userRepository;
+    @Autowired
+    private TokenService tokenService;
+    @Autowired
+    private LobbyService lobbyService;
+    @Autowired
+    private GameService gameService;
+    @Autowired
+    private ConnectionRegistry connectionRegistry;
+    @Autowired
+    private SimpUserRegistry userRegistry;
 
     private final HttpClient http = HttpClient.newHttpClient();
     private final List<WebSocketStompClient> stompClients = new ArrayList<>();
@@ -89,8 +98,14 @@ class GamePlayTest {
         StompSession session;
         final BlockingQueue<String> tableMessages = new LinkedBlockingQueue<>();
         final BlockingQueue<String> privateMessages = new LinkedBlockingQueue<>();
+        /**
+         * Messages des trames STOMP ERROR envoyées par le serveur (abonnement refusé…)
+         */
+        final BlockingQueue<String> stompErrors = new LinkedBlockingQueue<>();
 
-        /** Reçoit le message YOUR_TURN (JSON) et renvoie l'action à jouer (JSON), ou null pour ne rien faire. */
+        /**
+         * Reçoit le message YOUR_TURN (JSON) et renvoie l'action à jouer (JSON), ou null pour ne rien faire.
+         */
         volatile Function<String, String> strategy;
 
         TestPlayer(String name, String token) {
@@ -106,6 +121,11 @@ class GamePlayTest {
             connectHeaders.add("Authorization", "Bearer " + token);
             session = client.connectAsync("ws://localhost:" + port + "/ws",
                             new WebSocketHttpHeaders(), connectHeaders, new StompSessionHandlerAdapter() {
+                                // Appelé pour les trames ERROR du serveur
+                                @Override
+                                public void handleFrame(StompHeaders headers, Object payload) {
+                                    stompErrors.add(String.valueOf(headers.getFirst("message")));
+                                }
                             })
                     .get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
@@ -121,7 +141,9 @@ class GamePlayTest {
             }));
         }
 
-        /** Demande l'état complet de la partie, comme le navigateur au chargement de la page. */
+        /**
+         * Demande l'état complet de la partie, comme le navigateur au chargement de la page.
+         */
         void requestState() {
             StompHeaders headers = new StompHeaders();
             headers.setDestination("/app/tables/" + tableId + "/sync");
@@ -182,7 +204,9 @@ class GamePlayTest {
         return postToTable("leave-game", token);
     }
 
-    /** POST /api/tables/{tableId}/{action}, au nom du joueur dont on donne le jeton. */
+    /**
+     * POST /api/tables/{tableId}/{action}, au nom du joueur dont on donne le jeton.
+     */
     private HttpResponse<String> postToTable(String action, String token) throws Exception {
         HttpRequest request = HttpRequest.newBuilder(
                         URI.create("http://localhost:" + port + "/api/tables/" + tableId + "/" + action))
@@ -339,17 +363,37 @@ class GamePlayTest {
     }
 
     @Test
-    @DisplayName("Un joueur qui n'est pas à la table ne reçoit pas son état")
-    void strangerCannotSync() throws Exception {
+    @DisplayName("Un spectateur reçoit l'état public, sans aucune carte privée des joueurs")
+    void spectatorNeverSeesHoleCards() throws Exception {
+        // Carol n'est pas assise : elle regarde la table (topic public et sa propre file privée)
         UserAccount carolAccount = userService.register("Carol", "motdepasse123");
         TestPlayer carol = new TestPlayer("Carol", tokenService.issue(carolAccount).value());
         carol.connect();
+
         startGame(alice.token);
+        List<String> holeCards = new ArrayList<>(JsonPath.<List<String>>read(
+                waitFor(alice.privateMessages, "HOLE_CARDS", new ArrayList<>()), "$.data.cards"));
+        holeCards.addAll(JsonPath.<List<String>>read(
+                waitFor(bob.privateMessages, "HOLE_CARDS", new ArrayList<>()), "$.data.cards"));
 
         carol.requestState();
+        String state = waitFor(carol.privateMessages, "GAME_STATE", new ArrayList<>());
 
-        String error = waitFor(carol.privateMessages, "ERROR", new ArrayList<>());
-        assertEquals("Tu ne joues pas à cette table", JsonPath.read(error, "$.data.message"));
+        assertEquals(true, JsonPath.read(state, "$.data.spectator"));
+        assertEquals(0, (int) JsonPath.read(state, "$.data.holeCards.length()"));
+        assertNull(JsonPath.read(state, "$.data.yourTurn"));
+        assertEquals(1, (int) JsonPath.read(state, "$.data.table.handNumber"));
+
+        // Ni dans l'état, ni dans le déroulement public qu'elle a reçu : aucune carte privée
+        List<String> tableSeen = new ArrayList<>();
+        carol.tableMessages.drainTo(tableSeen);
+        assertFalse(tableSeen.isEmpty(), "Carol devrait recevoir le déroulement public de la partie");
+        for (String card : holeCards) {
+            String quoted = "\"" + card + "\"";
+            assertFalse(state.contains(quoted), "Le spectateur voit la carte " + card + " dans l'état !");
+            assertTrue(tableSeen.stream().noneMatch(json -> json.contains(quoted)),
+                    "Le spectateur voit la carte " + card + " sur le topic de la table !");
+        }
     }
 
     @Test
@@ -500,5 +544,26 @@ class GamePlayTest {
         TableView newTable = lobbyService.create(new Seat(aliceAccount.getId(), "Alice"),
                 new CreateTableRequest("Revanche", 10, 20, 200, 2));
         lobbyService.leave(newTable.id(), aliceAccount.getId());
+    }
+
+    @Test
+    @DisplayName("Un autre utilisateur ne peut pas s'abonner à la file privée d'un joueur pour voir ses cartes")
+    void cannotSpyOnAnotherPlayersPrivateQueue() throws Exception {
+        UserAccount carolAccount = userService.register("Carol", "motdepasse123");
+        TestPlayer carol = new TestPlayer("Carol", tokenService.issue(carolAccount).value());
+        carol.connect();
+
+        // L'attaque : Carol connaît l'identifiant de session de Bob,
+        // et vise la file interne où Spring range les messages privés de Bob
+        String bobSessionId = userRegistry.getUser(String.valueOf(bobAccount.getId()))
+                .getSessions().iterator().next().getId();
+        BlockingQueue<String> spied = new LinkedBlockingQueue<>();
+        carol.session.subscribe("/queue/game-user" + bobSessionId, handler(spied::add));
+        Thread.sleep(300); // laisse au serveur le temps de traiter (et de refuser) l'abonnement
+
+        startGame(alice.token);
+        waitFor(bob.privateMessages, "HOLE_CARDS", new ArrayList<>()); // Bob a bien reçu ses cartes…
+
+        assertNull(spied.poll(1, TimeUnit.SECONDS), "Carol a reçu les messages privés de Bob !"); // … Carol, rien
     }
 }

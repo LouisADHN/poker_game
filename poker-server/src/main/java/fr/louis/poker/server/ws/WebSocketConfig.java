@@ -22,11 +22,14 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final JwtStompInterceptor jwtStompInterceptor;
     private final String[] allowedOrigins;
+    private final SubscriptionGuard subscriptionGuard;
 
     public WebSocketConfig(JwtStompInterceptor jwtStompInterceptor,
-                           @Value("${poker.allowed-origins}") String[] allowedOrigins) {
+                           @Value("${poker.allowed-origins}") String[] allowedOrigins,
+                           SubscriptionGuard subscriptionGuard) {
         this.jwtStompInterceptor = jwtStompInterceptor;
         this.allowedOrigins = allowedOrigins;
+        this.subscriptionGuard = subscriptionGuard;
     }
 
     @Override
@@ -53,6 +56,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
         // Chaque message entrant passe d'abord par l'intercepteur d'authentification
-        registration.interceptors(jwtStompInterceptor);
+        registration.interceptors(jwtStompInterceptor, subscriptionGuard);
     }
 }

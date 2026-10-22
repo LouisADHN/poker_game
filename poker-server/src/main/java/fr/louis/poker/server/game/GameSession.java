@@ -363,20 +363,19 @@ public class GameSession {
     }
 
     /**
-     * Envoie à un joueur l'état complet de la partie, en message privé GAME_STATE :
+     * Envoie à un utilisateur l'état complet de la partie, en message privé GAME_STATE :
      * la photographie publique et son numéro, la présence de chacun, ses cartes et son tour en attente.
      *
      * Tout est lu ET envoyé sous le verrou de la session. Aucun autre message de la partie ne peut donc
      * partir entre la photographie et l'envoi : pour ce joueur, tout ce qui arrive avant GAME_STATE
      * y est déjà inclus, tout ce qui arrive après est plus récent.
+     * Un non joueur est spectateur
      *
      * @return false si le joueur n'est pas à cette table
      */
-    synchronized boolean sendStateTo(Long userId) {
+    synchronized void sendStateTo(Long userId) {
         RemotePlayerController controller = controllersByUser.get(userId);
-        if (controller == null) {
-            return false;
-        }
+        boolean spectator = controller == null;
 
         Map<String, String> presences = new LinkedHashMap<>();
         presenceByUser.forEach((id, presence) -> presences.put(nameByUserId.get(id), presence.name()));
@@ -384,13 +383,19 @@ public class GameSession {
         // LinkedHashMap et pas Map.of : "yourTurn" peut valoir null, ce que Map.of refuse
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("seq", seq);
-        data.put("table", tableState.snapshot());
+        data.put("spectator", spectator);
+        data.put("table", tableState.snapshot()); // publique : aucune carte privée dedans
         data.put("presences", presences);
-        data.put("holeCards", tableState.holeCardsOf(nameByUserId.get(userId)));
-        data.put("yourTurn", controller.pendingTurn().map(GameMessage::data).orElse(null));
+        if (spectator) {
+            // Rien de privé pour un spectateur : pas même une lecture des cartes de quelqu'un
+            data.put("holeCards", List.of());
+            data.put("yourTurn", null);
+        } else {
+            data.put("holeCards", tableState.holeCardsOf(nameByUserId.get(userId)));
+            data.put("yourTurn", controller.pendingTurn().map(GameMessage::data).orElse(null));
+        }
 
         sendToUser(userId, new GameMessage("GAME_STATE", data));
-        return true;
     }
 
     /** L'état public de la table et le numéro du dernier message public qu'il inclut, lus ensemble. */

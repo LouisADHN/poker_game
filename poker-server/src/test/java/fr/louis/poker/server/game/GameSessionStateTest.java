@@ -27,7 +27,8 @@ class GameSessionStateTest {
 
     private static final Long LOUIS = 1L;
     private static final Long ALICE = 2L;
-    private static final Long STRANGER = 99L;
+    /** Un utilisateur qui n'est pas assis à la table : un spectateur */
+    private static final Long SPECTATOR = 99L;
     private static final String LOUIS_QUEUE = "/user/" + LOUIS + GameSession.PRIVATE_QUEUE;
 
     private List<Message<?>> sentMessages;
@@ -99,12 +100,56 @@ class GameSessionStateTest {
     // ------------------------------------------------------------------
 
     @Test
-    @DisplayName("Un joueur qui n'est pas à la table ne reçoit rien")
-    void strangerGetsNothing() {
+    @DisplayName("Un spectateur reçoit l'état public, marqué spectateur, sans cartes ni tour")
+    void spectatorGetsThePublicState() {
         newSession(Duration.ofSeconds(30));
 
-        assertFalse(session.sendStateTo(STRANGER));
-        assertTrue(sentMessages.isEmpty());
+        session.sendStateTo(SPECTATOR);
+
+        Map<String, Object> state = lastStateFor(SPECTATOR);
+        assertEquals(true, state.get("spectator"));
+        assertEquals(List.of(), state.get("holeCards"));
+        assertNull(state.get("yourTurn"));
+        assertEquals(Map.of("Louis", "PRESENT", "Alice", "PRESENT"), state.get("presences"));
+    }
+
+    @Test
+    @DisplayName("En pleine main, un spectateur ne reçoit AUCUNE carte privée des joueurs")
+    void spectatorNeverSeesHoleCards() throws Exception {
+        newSession(Duration.ofSeconds(5)); // la main attend vraiment : les cartes sont distribuées et cachées
+        session.start();
+        waitForSomeoneToPlay();
+
+        session.sendStateTo(SPECTATOR);
+
+        // Toutes les cartes privées distribuées pendant la partie…
+        List<String> holeCards = sentMessages.stream()
+                .map(GameSessionStateTest::payload)
+                .filter(message -> message.type().equals("HOLE_CARDS"))
+                .flatMap(message -> ((List<?>) message.data().get("cards")).stream())
+                .map(Object::toString)
+                .toList();
+        assertEquals(4, holeCards.size(), "Deux joueurs, deux cartes chacun");
+
+        // … n'apparaissent nulle part dans ce que reçoit le spectateur
+        String spectatorState = lastStateFor(SPECTATOR).toString();
+        for (String card : holeCards) {
+            assertFalse(spectatorState.contains(card), "Le spectateur voit la carte " + card + " !");
+        }
+        assertNull(lastStateFor(SPECTATOR).get("yourTurn"));
+    }
+
+    @Test
+    @DisplayName("Un spectateur ne reçoit aucun message privé d'un joueur")
+    void spectatorReceivesNoPrivateMessages() throws Exception {
+        newSession(Duration.ofMillis(20));
+        session.start();
+        waitForSomeoneToPlay();
+        session.stop();
+        assertTrue(finished.await(5, TimeUnit.SECONDS));
+
+        String spectatorQueue = "/user/" + SPECTATOR + GameSession.PRIVATE_QUEUE;
+        assertTrue(sentMessages.stream().noneMatch(message -> spectatorQueue.equals(destination(message))));
     }
 
     @Test
@@ -112,12 +157,13 @@ class GameSessionStateTest {
     void stateBeforeTheFirstHand() {
         newSession(Duration.ofSeconds(30));
 
-        assertTrue(session.sendStateTo(LOUIS));
+        session.sendStateTo(LOUIS);
 
         Message<?> message = sentMessages.getFirst();
         assertEquals(LOUIS_QUEUE, destination(message), "GAME_STATE doit partir en message privé");
         Map<String, Object> state = payload(message).data();
         assertEquals(0L, state.get("seq"));
+        assertEquals(false, state.get("spectator"));
         assertEquals(0, ((TableSnapshot) state.get("table")).handNumber());
         assertEquals(Map.of("Louis", "PRESENT", "Alice", "PRESENT"), state.get("presences"));
         assertEquals(List.of(), state.get("holeCards"));

@@ -114,9 +114,7 @@ public class GameService {
         if (session == null) {
             throw new LobbyConflictException("Aucune partie en cours à cette table");
         }
-        if (!session.sendStateTo(userId)) {
-            throw new LobbyConflictException("Tu ne joues pas à cette table");
-        }
+        session.sendStateTo(userId);
     }
 
     /**
