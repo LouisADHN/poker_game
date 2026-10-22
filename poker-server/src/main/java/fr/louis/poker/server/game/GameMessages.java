@@ -5,6 +5,7 @@ import fr.louis.poker.controller.GameView;
 import fr.louis.poker.event.GameEvent;
 import fr.louis.poker.model.Card;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -84,16 +85,26 @@ public class GameMessages {
                 "presence", presence.name()));
     }
 
-    public static GameMessage yourTurn(GameView view) {
-        return new GameMessage("YOUR_TURN", Map.of(
-                "street", view.street().name(),
-                "holeCards", cards(view.holeCards()),
-                "board", cards(view.board()),
-                "chips", view.chips(),
-                "pot", view.pot(),
-                "currentBet", view.currentBet(),
-                "myStreetBet", view.myStreetBet(),
-                "opponents", view.opponents(),
-                "legalActions", view.legalActions()));
+    /**
+     * Le message « c'est à toi » : tout ce que le joueur a le droit de savoir pour décider.
+     *
+     * @param timeLeft temps qu'il lui reste pour jouer (tout le délai au début du tour,
+     *                 moins s'il revient en cours de tour)
+     * @param timeout  délai complet d'un tour, pour dessiner la jauge
+     */
+    public static GameMessage yourTurn(GameView view, Duration timeLeft, Duration timeout) {
+        // Map.of accepte au plus 10 paires : au-delà, Map.ofEntries
+        return new GameMessage("YOUR_TURN", Map.ofEntries(
+                Map.entry("street", view.street().name()),
+                Map.entry("holeCards", cards(view.holeCards())),
+                Map.entry("board", cards(view.board())),
+                Map.entry("chips", view.chips()),
+                Map.entry("pot", view.pot()),
+                Map.entry("currentBet", view.currentBet()),
+                Map.entry("myStreetBet", view.myStreetBet()),
+                Map.entry("opponents", view.opponents()),
+                Map.entry("legalActions", view.legalActions()),
+                Map.entry("timeLeftMs", timeLeft.toMillis()),
+                Map.entry("turnTimeoutMs", timeout.toMillis())));
     }
 }

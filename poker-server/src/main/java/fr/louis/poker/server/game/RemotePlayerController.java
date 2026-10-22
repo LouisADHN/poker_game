@@ -34,6 +34,14 @@ public class RemotePlayerController implements PlayerController {
      */
     private static final Optional<Action> WAKE_UP = Optional.empty();
 
+    /**
+     * Le tour en cours : la situation envoyée au joueur, et l'heure limite pour jouer.
+     * L'heure vient de System.nanoTime() : une horloge qui ne fait qu'avancer,
+     * même si l'heure du serveur est corrigée pendant le tour.
+     */
+    private record PendingTurn(GameView view, long deadlineNanos) {
+    }
+
     private final Long userId;
     private final Consumer<GameMessage> privateSender;
     private final Duration timeout;
@@ -45,6 +53,9 @@ public class RemotePlayerController implements PlayerController {
 
     /** Vrai si le joueur joue en automatique (absent ou parti). */
     private volatile boolean autoPlay = false;
+
+    /** Le tour en cours, ou null si le moteur n'attend pas ce joueur. Lu par d'autres threads. */
+    private volatile PendingTurn pending;
 
     /**
      * @param userId        identifiant du joueur
@@ -101,18 +112,37 @@ public class RemotePlayerController implements PlayerController {
                 return null;
             }
 
-            privateSender.accept(GameMessages.yourTurn(view));
+            // Retenu AVANT l'envoi : un joueur qui revient juste après le trouvera
+            pending = new PendingTurn(view, System.nanoTime() + timeout.toNanos());
+            privateSender.accept(GameMessages.yourTurn(view, timeout, timeout));
             // Attend une action au maximum "timeout" ; null si le délai expire
-            Optional<Action> received = actions.poll(timeout.toMillis(), TimeUnit.MILLISECONDS);
-            // received == null : délai expiré ; Optional vide : réveil (passage en automatique)
+            Optional<Action> received = actions.poll(timeout.toNanos(), TimeUnit.NANOSECONDS);
             return received == null ? null : received.orElse(null);
         } catch (InterruptedException e) {
             // La partie est arrêtée : on rétablit le signal d'interruption pour l'appelant
             Thread.currentThread().interrupt();
             return null;
         } finally {
+            pending = null;
             waiting = false;
         }
+    }
+
+    /**
+     * Le message YOUR_TURN du tour en cours, avec le temps qu'il reste vraiment ;
+     * vide si ce n'est pas le tour de ce joueur. Pour un joueur qui revient en plein tour.
+     *
+     * Appelé par un autre thread que celui de la table.
+     */
+    public Optional<GameMessage> pendingTurn() {
+        // Une seule lecture du champ : le tour peut se terminer pendant qu'on construit le message,
+        // on travaille donc sur une copie locale qui, elle, ne changera pas
+        PendingTurn current = pending;
+        if (current == null) {
+            return Optional.empty();
+        }
+        long nanosLeft = Math.max(0, current.deadlineNanos() - System.nanoTime());
+        return Optional.of(GameMessages.yourTurn(current.view(), Duration.ofNanos(nanosLeft), timeout));
     }
 
     /**

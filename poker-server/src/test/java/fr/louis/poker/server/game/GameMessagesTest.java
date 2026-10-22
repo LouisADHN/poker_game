@@ -13,6 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -94,7 +95,7 @@ class GameMessagesTest {
             GameView view = new GameView("Louis", Card.parseAll("As Kd"), 980, Street.PREFLOP,
                     List.of(), 30, 20, 0, List.of(bob), legal);
 
-            GameMessage message = GameMessages.yourTurn(view);
+            GameMessage message = GameMessages.yourTurn(view, Duration.ofSeconds(12), Duration.ofSeconds(30));
 
             assertEquals("YOUR_TURN", message.type());
             assertEquals("PREFLOP", message.data().get("street"));
@@ -102,6 +103,8 @@ class GameMessagesTest {
             assertEquals(30, message.data().get("pot"));
             assertEquals(legal, message.data().get("legalActions"));
             assertEquals(List.of(bob), message.data().get("opponents"));
+            assertEquals(12_000L, message.data().get("timeLeftMs"));
+            assertEquals(30_000L, message.data().get("turnTimeoutMs"));
         }
     }
 

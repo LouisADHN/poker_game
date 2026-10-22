@@ -40,6 +40,16 @@ public class GameSession {
 
     public static final String PRIVATE_QUEUE = "/queue/game";
 
+    /** En-tête STOMP qui porte le numéro de séquence de chaque message public de la table. */
+    public static final String SEQ_HEADER = "seq";
+
+    /**
+     * L'état public de la table, avec le numéro du dernier message public qu'il inclut.
+     * Un client qui reçoit cette photographie sait ainsi quels messages il a déjà « vus ».
+     */
+    public record PublicView(long seq, TableSnapshot table) {
+    }
+
     /** Pourquoi la partie s'est terminée : envoyé dans le message GAME_OVER. */
     public enum EndReason {
         /** Il ne reste qu'un joueur avec des jetons : la partie est allée à son terme. */
@@ -70,6 +80,15 @@ public class GameSession {
     private final Map<Long, Presence> presenceByUser = new HashMap<>();
     private final GameEngine engine;
     private final ResultTracker resultTracker;
+
+    /** L'état lisible de la partie, mis à jour à chaque événement du moteur. */
+    private final TableState tableState;
+
+    /**
+     * Numéro du dernier message public envoyé à la table (0 : aucun).
+     * Incrémenté sous le verrou de la session, en même temps que l'envoi : voir sendToTable().
+     */
+    private long seq = 0;
 
     /**
      * Faux tant que les navigateurs n'ont pas eu le temps de s'abonner à la partie.
@@ -122,6 +141,12 @@ public class GameSession {
 
         // SecureRandom : un mélange imprévisible, impossible à deviner à partir des mains précédentes
         this.engine = new GameEngine(table, controllers, new SecureRandom());
+
+        // Créée AVANT l'ajout du listener : onEvent s'en sert dès le premier événement
+        this.tableState = new TableState(
+                seats.stream().map(Seat::username).toList(),
+                settings.startingChips());
+
         this.engine.addListener(this::onEvent);
 
         // Second listener : il tient les comptes pour le résultat final
@@ -309,7 +334,18 @@ public class GameSession {
     // ------------------------------------------------------------------
     // Diffusion
 
-    private void onEvent(GameEvent event) {
+    /**
+     * Appelé par le thread de la table pour chaque événement du moteur.
+     *
+     * synchronized : mettre à jour la projection et envoyer le message forment un seul bloc.
+     * Un autre thread qui demande publicView() voit donc l'état AVANT l'événement (et l'ancien numéro),
+     * ou APRÈS (et le nouveau numéro), jamais un mélange des deux.
+     *
+     * Le verrou n'est pas gardé pendant que le moteur attend la décision d'un joueur :
+     * decide() est appelé par le moteur en dehors des listeners.
+     */
+    private synchronized void onEvent(GameEvent event) {
+        tableState.onEvent(event);
         GameMessage message = GameMessages.fromEvent(event);
 
         if (event instanceof GameEvent.HoleCardsDealt(String player, var cards)) {
@@ -320,8 +356,19 @@ public class GameSession {
         }
     }
 
-    private void sendToTable(GameMessage message) {
-        messaging.convertAndSend(gameTopic(tableId), message);
+    /**
+     * Envoie un message à toute la table, avec le numéro de séquence suivant dans l'en-tête "seq".
+     * synchronized : deux messages ne peuvent pas recevoir le même numéro, et ils partent
+     * dans l'ordre de leurs numéros (le broker conserve ensuite l'ordre d'envoi).
+     */
+    private synchronized void sendToTable(GameMessage message) {
+        seq++;
+        messaging.convertAndSend(gameTopic(tableId), message, Map.of(SEQ_HEADER, seq));
+    }
+
+    /** L'état public de la table et le numéro du dernier message public qu'il inclut, lus ensemble. */
+    synchronized PublicView publicView() {
+        return new PublicView(seq, tableState.snapshot());
     }
 
     private void sendToUser(Long userId, GameMessage message) {
