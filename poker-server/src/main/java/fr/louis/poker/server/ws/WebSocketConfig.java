@@ -34,6 +34,11 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         // Adresse d'ouverture de la connexion : ws://localhost:8080/ws
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns(allowedOrigins);
+        // Les trames d'un même client sont traitées dans l'ordre où elles arrivent.
+        // Sans ce réglage, plusieurs threads les traitent en parallèle : une demande /sync envoyée
+        // juste après un SUBSCRIBE pourrait être traitée avant lui, et sa réponse partirait
+        // vers un abonnement qui n'existe pas encore (elle serait perdue).
+        registry.setPreserveReceiveOrder(true);
     }
 
     @Override
