@@ -28,10 +28,12 @@ public class JwtStompInterceptor implements ChannelInterceptor {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtDecoder jwtDecoder;
-    private final JwtAuthenticationConverter authenticationConverter = new JwtAuthenticationConverter();
+    private final JwtAuthenticationConverter authenticationConverter;
 
-    public JwtStompInterceptor(JwtDecoder jwtDecoder) {
+    /** Le même convertisseur que pour HTTP : un invité a aussi le rôle GUEST sur le WebSocket. */
+    public JwtStompInterceptor(JwtDecoder jwtDecoder, JwtAuthenticationConverter authenticationConverter) {
         this.jwtDecoder = jwtDecoder;
+        this.authenticationConverter = authenticationConverter;
     }
 
     @Override

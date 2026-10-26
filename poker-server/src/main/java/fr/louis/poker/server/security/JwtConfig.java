@@ -4,15 +4,19 @@ import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.util.Base64;
+import java.util.List;
 
 /**
  * Crée les objets qui signent (encoder) et vérifient (decoder) les jetons JWT.
@@ -51,5 +55,22 @@ public class JwtConfig {
         return NimbusJwtDecoder.withSecretKey(jwtSecretKey)
                 .macAlgorithm(MacAlgorithm.HS256)
                 .build();
+    }
+
+    /**
+     * Transforme un jeton vérifié en utilisateur Spring Security, avec UN rôle :
+     * ROLE_GUEST pour un invité (claim "guest": true), ROLE_PLAYER pour un compte.
+     *
+     * Un jeton sans le claim "guest" est celui d'un compte : les jetons distribués avant
+     * l'arrivée des invités restent donc valables, personne n'a à se reconnecter.
+     *
+     * Utilisé pour les requêtes HTTP (SecurityConfig) ET pour le WebSocket (JwtStompInterceptor).
+     */
+    @Bean
+    JwtAuthenticationConverter jwtAuthenticationConverter() {
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(jwt -> List.<GrantedAuthority>of(new SimpleGrantedAuthority(
+                TokenService.isGuest(jwt) ? TokenService.ROLE_GUEST : TokenService.ROLE_PLAYER)));
+        return converter;
     }
 }
