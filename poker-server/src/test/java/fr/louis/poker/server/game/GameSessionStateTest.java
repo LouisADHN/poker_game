@@ -10,9 +10,13 @@ import org.springframework.messaging.Message;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
+import java.lang.reflect.RecordComponent;
 import java.time.Duration;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -83,6 +87,38 @@ class GameSessionStateTest {
                 .data();
     }
 
+    /**
+     * Tous les textes contenus dans un objet : valeurs des Map, éléments des listes, champs des records.
+     *
+     * On compare ensuite des cartes ENTIÈRES ("Ac") à ces textes, et pas des morceaux de texte :
+     * chercher "Ac" dans un toString() le trouverait aussi dans le nom de champ "lastAction" !
+     */
+    private static Set<String> allTexts(Object value) {
+        Set<String> texts = new HashSet<>();
+        collectTexts(value, texts);
+        return texts;
+    }
+
+    private static void collectTexts(Object value, Set<String> texts) {
+        switch (value) {
+            case null -> { }
+            case String text -> texts.add(text);
+            case Map<?, ?> map -> map.values().forEach(v -> collectTexts(v, texts));
+            case Collection<?> collection -> collection.forEach(v -> collectTexts(v, texts));
+            case Record record -> {
+                // Un record (TableSnapshot, PlayerSnapshot…) : on lit chacun de ses champs
+                for (RecordComponent component : record.getClass().getRecordComponents()) {
+                    try {
+                        collectTexts(component.getAccessor().invoke(record), texts);
+                    } catch (ReflectiveOperationException e) {
+                        throw new IllegalStateException(e);
+                    }
+                }
+            }
+            default -> { } // nombres, booléens, enums : pas de carte là-dedans
+        }
+    }
+
     /** Attend qu'un YOUR_TURN soit parti vers l'un des joueurs, et renvoie son identifiant. */
     private Long waitForSomeoneToPlay() throws InterruptedException {
         long deadline = System.currentTimeMillis() + 5000;
@@ -118,9 +154,10 @@ class GameSessionStateTest {
     void spectatorNeverSeesHoleCards() throws Exception {
         newSession(Duration.ofSeconds(5)); // la main attend vraiment : les cartes sont distribuées et cachées
         session.start();
-        waitForSomeoneToPlay();
+        Long playing = waitForSomeoneToPlay();
 
         session.sendStateTo(SPECTATOR);
+        session.sendStateTo(playing);
 
         // Toutes les cartes privées distribuées pendant la partie…
         List<String> holeCards = sentMessages.stream()
@@ -132,11 +169,17 @@ class GameSessionStateTest {
         assertEquals(4, holeCards.size(), "Deux joueurs, deux cartes chacun");
 
         // … n'apparaissent nulle part dans ce que reçoit le spectateur
-        String spectatorState = lastStateFor(SPECTATOR).toString();
+        Set<String> spectatorTexts = allTexts(lastStateFor(SPECTATOR));
         for (String card : holeCards) {
-            assertFalse(spectatorState.contains(card), "Le spectateur voit la carte " + card + " !");
+            assertFalse(spectatorTexts.contains(card), "Le spectateur voit la carte " + card + " !");
         }
         assertNull(lastStateFor(SPECTATOR).get("yourTurn"));
+
+        // Contre-épreuve : le même détecteur trouve bien les cartes d'un joueur dans SON état.
+        // Sans elle, un détecteur qui ne trouverait jamais rien ferait passer le test à tort.
+        List<?> playingCards = (List<?>) lastStateFor(playing).get("holeCards");
+        assertEquals(2, playingCards.size());
+        assertTrue(allTexts(lastStateFor(playing)).containsAll(playingCards));
     }
 
     @Test
