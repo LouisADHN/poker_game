@@ -103,10 +103,12 @@ class GuestAccessTest {
     // Permis à un invité
 
     @Test
-    @DisplayName("Un invité peut consulter une table et quitter sa partie")
+    @DisplayName("Un invité peut consulter une table, la quitter avant le début, et quitter sa partie")
     void guestCanPlay() throws Exception {
         // 404 et 409 et pas 403 : la sécurité l'a laissé passer, c'est la table qui n'existe pas
         mockMvc.perform(get("/api/tables/" + NO_TABLE).header(HttpHeaders.AUTHORIZATION, guest))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/tables/" + NO_TABLE + "/leave").header(HttpHeaders.AUTHORIZATION, guest))
                 .andExpect(status().isNotFound());
         mockMvc.perform(post("/api/tables/" + NO_TABLE + "/leave-game").header(HttpHeaders.AUTHORIZATION, guest))
                 .andExpect(status().isConflict());

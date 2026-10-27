@@ -5,6 +5,7 @@ import fr.louis.poker.server.lobby.LobbyConflictException;
 import fr.louis.poker.server.lobby.LobbyService;
 import fr.louis.poker.server.lobby.Seat;
 import fr.louis.poker.server.lobby.TableView;
+import fr.louis.poker.server.stats.GameResult;
 import fr.louis.poker.server.stats.GameResultService;
 import jakarta.annotation.PreDestroy;
 import org.springframework.context.ApplicationEventPublisher;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 /**
  * Orchestre les parties : lancement depuis le lobby, transmission des actions,
@@ -57,7 +59,7 @@ public class GameService {
                 table.settings(),
                 properties,
                 messaging,
-                gameResultService::record, // enregistre le résultat si la partie va à son terme
+                resultRecorderFor(table), // que faire du résultat si la partie va à son terme
                 () -> finish(tableId));
 
         // Enregistrée AVANT le démarrage, pour accepter les actions dès le premier tour
@@ -70,6 +72,21 @@ public class GameService {
 
         session.start();
         return table;
+    }
+
+    /**
+     * Ce qu'il faut faire du résultat d'une partie terminée.
+     *
+     * Une partie du lobby est enregistrée : elle compte dans le classement.
+     * Une partie locale ne l'est jamais. C'est un choix (le mode local est un jeu de salon),
+     * et aussi une nécessité : un invité n'existe pas en base, et la table game_players
+     * exige un user_id présent dans users (clé étrangère). L'enregistrer échouerait.
+     */
+    Consumer<GameResult> resultRecorderFor(TableView table) {
+        if (table.local()) {
+            return result -> { }; // ne rien faire
+        }
+        return gameResultService::record;
     }
 
     /**

@@ -9,6 +9,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import fr.louis.poker.server.lobby.JoinCodeNotFoundException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -19,6 +20,14 @@ import java.util.Map;
  */
 @RestControllerAdvice
 public class ApiExceptionHandler {
+
+    /** Code d'accès d'une table locale inconnu (ou partie déjà terminée) : 404 Not Found */
+    @ExceptionHandler(JoinCodeNotFoundException.class)
+    ProblemDetail handleJoinCodeNotFound(JoinCodeNotFoundException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
+        problem.setTitle("Code inconnu");
+        return problem;
+    }
 
     /** Pseudo déjà pris : 409 Conflict. */
     @ExceptionHandler(UsernameAlreadyTakenException.class)

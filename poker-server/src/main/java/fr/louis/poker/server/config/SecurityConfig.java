@@ -16,7 +16,10 @@ import org.springframework.security.web.SecurityFilterChain;
  *
  * - L'API (/api/**) exige un jeton JWT, sauf l'authentification et le ping.
  * - Un invité (mode local, rôle GUEST) n'a accès qu'à ce dont il a besoin pour jouer :
- *   voir sa table et quitter sa partie. Tout le reste de l'API est réservé aux comptes (rôle PLAYER).
+ *   voir sa table, la quitter avant le début, et quitter sa partie.
+ *   Tout le reste de l'API est réservé aux comptes (rôle PLAYER).
+ * - La route qui fait d'un visiteur un invité (POST /api/local/{code}/guest) est publique :
+ *   c'est elle qui lui donne son jeton, il ne peut donc pas en avoir avant.
  * - Tout le reste est public : les fichiers de l'interface Vue (qui ne contiennent
  *   aucune donnée), l'ouverture du WebSocket (authentifié ensuite par la trame CONNECT)
  *   et la page d'erreur.
@@ -37,8 +40,11 @@ public class SecurityConfig {
                 // Les règles sont lues dans l'ordre : la PREMIÈRE qui correspond s'applique
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**", "/api/ping").permitAll()
+                        // Mode local : s'asseoir comme invité avec le code d'accès
+                        .requestMatchers(HttpMethod.POST, "/api/local/*/guest").permitAll()
                         // Ce qu'un invité a le droit de faire (un compte aussi, évidemment)
                         .requestMatchers(HttpMethod.GET, "/api/tables/*").hasAnyRole("PLAYER", "GUEST")
+                        .requestMatchers(HttpMethod.POST, "/api/tables/*/leave").hasAnyRole("PLAYER", "GUEST")
                         .requestMatchers(HttpMethod.POST, "/api/tables/*/leave-game").hasAnyRole("PLAYER", "GUEST")
                         // Tout le reste de l'API : comptes uniquement
                         .requestMatchers("/api/**").hasRole("PLAYER")

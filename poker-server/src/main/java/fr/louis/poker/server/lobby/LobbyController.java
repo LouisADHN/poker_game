@@ -50,7 +50,8 @@ public class LobbyController {
     }
 
 
-    private static Seat seatOf(Jwt jwt) {
+    /** Le joueur décrit par ce jeton. Aussi utilisé par LocalController, d'où la visibilité « package ». */
+    static Seat seatOf(Jwt jwt) {
         return new Seat(Long.valueOf(jwt.getSubject()), jwt.getClaimAsString(TokenService.USERNAME_CLAIM));
     }
 }
