@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, ApiError } from '@/api/http'
-import type { ActionType, TableView } from '@/api/types'
+import type { TableView } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { describePresence, useGameStore, type PlayerState } from '@/stores/game'
 import { useLocalPlayerStore } from '@/stores/localPlayer'
+import ActionBar from '@/components/ActionBar.vue'
 import PlayingCard from '@/components/PlayingCard.vue'
 
 const route = useRoute()
@@ -14,18 +15,8 @@ const auth = useAuthStore()
 const game = useGameStore()
 
 const loadError = ref<string | null>(null)
-/** Montant choisi pour une mise ou une relance */
-const raiseTotal = ref(0)
-
-/** Heure actuelle, rafraîchie régulièrement pour faire avancer le compte à rebours */
-const now = ref(Date.now())
-let clock: number | undefined
 
 onMounted(async () => {
-  clock = window.setInterval(() => {
-    now.value = Date.now()
-  }, 250)
-
   try {
     const table = await api<TableView>(`/api/tables/${Number(route.params.id)}`)
     game.start(table)
@@ -34,20 +25,7 @@ onMounted(async () => {
   }
 })
 
-onUnmounted(() => {
-  window.clearInterval(clock)
-  game.stop()
-})
-
-// Quand c'est à moi de jouer, on propose la relance minimum par défaut
-watch(
-  () => game.turn,
-  (turn) => {
-    if (turn) {
-      raiseTotal.value = turn.legalActions.minRaiseTo
-    }
-  },
-)
+onUnmounted(() => game.stop())
 
 // ------------------------------------------------------------------
 // Placement des joueurs autour de la table
@@ -106,45 +84,6 @@ function statusText(player: PlayerState): string | null {
   if (player.status === 'OUT') return 'Éliminé'
   if (player.status === 'ALL_IN') return 'Tapis'
   return player.lastAction
-}
-
-// ------------------------------------------------------------------
-// Mon tour
-
-const secondsLeft = computed(() =>
-  game.turnDeadline === null
-    ? null
-    : Math.max(0, Math.ceil((game.turnDeadline - now.value) / 1000)),
-)
-
-/** Remplissage de la jauge, de 100 % à 0 % */
-const timerPercent = computed(() =>
-  secondsLeft.value === null ? 0 : ((secondsLeft.value * 1000) / game.turnTimeoutMs) * 100,
-)
-
-const raiseLabel = computed(() => (game.turn?.currentBet === 0 ? 'Miser' : 'Relancer'))
-
-/** Message de la barre d'actions quand ce n'est pas mon tour */
-const waitingText = computed(() =>
-  game.handNumber === 0 ? 'La partie va commencer…' : 'En attente des autres joueurs…',
-)
-
-function play(type: ActionType, total?: number) {
-  try {
-    game.act(total === undefined ? { type } : { type, total })
-  } catch (e) {
-    game.error = e instanceof Error ? e.message : 'Action impossible.'
-  }
-}
-
-function raise() {
-  const turn = game.turn
-  if (!turn) {
-    return
-  }
-  const { minRaiseTo, maxRaiseTo } = turn.legalActions
-  const total = Math.min(Math.max(raiseTotal.value, minRaiseTo), maxRaiseTo)
-  play(turn.currentBet === 0 ? 'BET' : 'RAISE', total)
 }
 
 function backToLobby() {
@@ -375,66 +314,8 @@ async function toggleFullscreen() {
         </div>
       </section>
 
-      <!-- Mes actions : la zone est toujours présente, pour que la mise en page ne saute pas -->
-      <section
-        v-if="!game.spectator"
-        class="action-bar"
-        :class="{ 'action-bar--active': game.turn }"
-        aria-labelledby="actions-title"
-      >
-        <h2 id="actions-title" class="visually-hidden">Mes actions</h2>
-
-        <template v-if="game.turn">
-          <!-- Jauge du temps restant : un trait fin en haut de la barre -->
-          <div class="timer" aria-hidden="true">
-            <span :style="{ width: `${timerPercent}%` }"></span>
-          </div>
-
-          <p class="turn-title">
-            À toi
-            <span v-if="secondsLeft !== null" class="seconds">{{ secondsLeft }} s</span>
-          </p>
-
-          <div class="actions">
-            <button type="button" @click="play('FOLD')">Se coucher</button>
-
-            <button
-              v-if="game.turn.legalActions.canCheck"
-              type="button"
-              class="primary"
-              @click="play('CHECK')"
-            >
-              Checker
-            </button>
-            <button v-else type="button" class="primary" @click="play('CALL')">
-              Suivre {{ game.turn.legalActions.toCall }}
-            </button>
-
-            <div v-if="game.turn.legalActions.canRaise" class="raise">
-              <label for="raise-total" class="visually-hidden">Montant de la relance</label>
-              <input
-                id="raise-total"
-                v-model.number="raiseTotal"
-                type="range"
-                :min="game.turn.legalActions.minRaiseTo"
-                :max="game.turn.legalActions.maxRaiseTo"
-              />
-              <input
-                v-model.number="raiseTotal"
-                type="number"
-                aria-label="Montant"
-                :min="game.turn.legalActions.minRaiseTo"
-                :max="game.turn.legalActions.maxRaiseTo"
-              />
-              <button type="button" @click="raise">{{ raiseLabel }} à {{ raiseTotal }}</button>
-            </div>
-
-            <button type="button" @click="play('ALL_IN')">Tapis ({{ game.turn.chips }})</button>
-          </div>
-        </template>
-
-        <p v-else class="waiting">{{ waitingText }}</p>
-      </section>
+      <!-- Mes actions (un spectateur n'en a pas) -->
+      <ActionBar v-if="!game.spectator" />
 
       <!-- Historique -->
       <section class="log-panel" aria-labelledby="log-title">
@@ -757,84 +638,13 @@ async function toggleFullscreen() {
 }
 
 /* ------------------------------------------------------------------
-   Barre d'actions : une seule ligne, hauteur réservée en permanence
+   Barre d'actions (composant ActionBar) : son apparence est dans le composant,
+   la page ne décide que de sa place dans la grille.
+   Ça marche malgré "scoped" : Vue applique aussi les styles du parent
+   à l'élément racine d'un composant enfant (ici la <section class="action-bar">).
    ------------------------------------------------------------------ */
 .action-bar {
   grid-area: actions;
-  position: relative;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-4);
-  min-height: 4rem;
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-m);
-  background: var(--ink-raised);
-  overflow: hidden;
-}
-
-.action-bar--active {
-  border-color: var(--brass);
-}
-
-.action-bar button {
-  min-height: 2.5rem;
-  padding: 0.35rem 0.9rem;
-}
-
-.action-bar input[type='number'] {
-  padding-block: 0.4rem;
-}
-
-.waiting {
-  margin: 0 auto;
-  color: var(--muted);
-}
-
-/* La jauge : un trait fin collé en haut de la barre */
-.timer {
-  position: absolute;
-  inset: 0 0 auto;
-  height: 3px;
-  background: var(--line);
-}
-
-.timer span {
-  display: block;
-  height: 100%;
-  background: var(--brass);
-  transition: width 0.25s linear;
-}
-
-.turn-title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.15rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.seconds {
-  margin-left: var(--space-1);
-  color: var(--brass);
-  font-variant-numeric: tabular-nums;
-}
-
-.actions,
-.raise {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.raise input[type='range'] {
-  width: 8rem;
-}
-
-.raise input[type='number'] {
-  width: 5.5rem;
 }
 
 /* ------------------------------------------------------------------
@@ -1009,7 +819,12 @@ async function toggleFullscreen() {
     width: clamp(7rem, 30cqw, 8.5rem);
   }
 
-  .action-bar {
+  /*
+    ".game-layout .action-bar" et pas ".action-bar" seul : le composant déclare
+    position: relative avec la même force. Un sélecteur plus précis l'emporte
+    toujours, quel que soit l'ordre de chargement des deux feuilles de style.
+  */
+  .game-layout .action-bar {
     position: sticky;
     bottom: 0;
     z-index: 2;

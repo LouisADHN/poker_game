@@ -89,30 +89,35 @@ describe('useGameStore', () => {
     return game
   }
 
-  // it.each : le même test pour chaque combinaison (table locale ?, spectateur ?) -> grand écran ?
-  it.each<[boolean, boolean, boolean]>([
-    [true, true, true],
-    [true, false, false],
-    [false, true, false],
-    [false, false, false],
-  ])('local=%s, spectateur=%s -> grand écran=%s', (local, spectator, expected) => {
-    const game = useGameStore()
-    game.start({ ...table, local })
+  // it.each : le même test pour chaque combinaison (table locale ?, spectateur ?)
+  // -> grand écran ? manette ? Les deux ne sont jamais vrais en même temps.
+  it.each<[boolean, boolean, boolean, boolean]>([
+    [true, true, true, false],
+    [true, false, false, true],
+    [false, true, false, false],
+    [false, false, false, false],
+  ])(
+    'local=%s, spectateur=%s -> grand écran=%s, manette=%s',
+    (local, spectator, bigScreen, controller) => {
+      const game = useGameStore()
+      game.start({ ...table, local })
 
-    game.handle({
-      type: 'GAME_STATE',
-      data: {
-        seq: 0,
-        spectator,
-        table: { handNumber: 0, dealer: null, street: null, board: [], pot: 0, players: [] },
-        presences: {},
-        holeCards: [],
-        yourTurn: null,
-      },
-    })
+      game.handle({
+        type: 'GAME_STATE',
+        data: {
+          seq: 0,
+          spectator,
+          table: { handNumber: 0, dealer: null, street: null, board: [], pot: 0, players: [] },
+          presences: {},
+          holeCards: [],
+          yourTurn: null,
+        },
+      })
 
-    expect(game.bigScreen).toBe(expected)
-  })
+      expect(game.bigScreen).toBe(bigScreen)
+      expect(game.controller).toBe(controller)
+    },
+  )
 
   it('commence avec tous les joueurs présents', () => {
     const game = startedStore()

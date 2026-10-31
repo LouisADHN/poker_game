@@ -132,6 +132,12 @@ export const useGameStore = defineStore('game', () => {
    * computed : se recalcule tout seul quand spectator ou local change.
    */
   const bigScreen = computed(() => spectator.value && local.value)
+  /**
+   * Vrai pour la manette du mode local : le téléphone d'un joueur assis à une table locale.
+   * La table est déjà dessinée sur la télé : le téléphone n'affiche que mes cartes et mes actions.
+   * C'est le cas exactement inverse du grand écran, pour une même table locale.
+   */
+  const controller = computed(() => local.value && !spectator.value)
   /** Historique de la partie, le plus récent en premier */
   const log = ref<string[]>([])
   /** Classement final, non null quand la partie est terminée */
@@ -488,6 +494,7 @@ export const useGameStore = defineStore('game', () => {
     spectator,
     local,
     bigScreen,
+    controller,
     log,
     standings,
     endReason,
