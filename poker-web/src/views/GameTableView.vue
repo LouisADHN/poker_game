@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import {computed, onMounted, onUnmounted, ref, watch} from 'vue'
-import {useRoute, useRouter} from 'vue-router'
-import {api, ApiError} from '@/api/http'
-import type {ActionType, TableView} from '@/api/types'
-import {useAuthStore} from '@/stores/auth'
-import {describePresence, useGameStore, type PlayerState} from '@/stores/game'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { api, ApiError } from '@/api/http'
+import type { ActionType, TableView } from '@/api/types'
+import { useAuthStore } from '@/stores/auth'
+import { describePresence, useGameStore, type PlayerState } from '@/stores/game'
 import PlayingCard from '@/components/PlayingCard.vue'
 
 const route = useRoute()
@@ -72,8 +72,7 @@ function isMe(name: string): boolean {
 const seats = computed<Seat[]>(() => {
   const players = game.players
   const myIndex = players.findIndex((p) => isMe(p.name))
-  const ordered =
-    myIndex <= 0 ? players : [...players.slice(myIndex), ...players.slice(0, myIndex)]
+  const ordered = myIndex <= 0 ? players : [...players.slice(myIndex), ...players.slice(0, myIndex)]
 
   return ordered.map((player, i) => {
     // π/2 = 90° = en bas de l'écran ; on tourne ensuite dans le sens des aiguilles d'une montre
@@ -131,7 +130,7 @@ const waitingText = computed(() =>
 
 function play(type: ActionType, total?: number) {
   try {
-    game.act(total === undefined ? {type} : {type, total})
+    game.act(total === undefined ? { type } : { type, total })
   } catch (e) {
     game.error = e instanceof Error ? e.message : 'Action impossible.'
   }
@@ -142,13 +141,13 @@ function raise() {
   if (!turn) {
     return
   }
-  const {minRaiseTo, maxRaiseTo} = turn.legalActions
+  const { minRaiseTo, maxRaiseTo } = turn.legalActions
   const total = Math.min(Math.max(raiseTotal.value, minRaiseTo), maxRaiseTo)
   play(turn.currentBet === 0 ? 'BET' : 'RAISE', total)
 }
 
 function backToLobby() {
-  router.push({name: 'lobby'})
+  router.push({ name: 'lobby' })
 }
 
 // ------------------------------------------------------------------
@@ -158,14 +157,12 @@ function backToLobby() {
 const leaving = ref(false)
 
 /** Le bouton n'a de sens que pendant la partie : une fois la table chargée, et avant la fin */
-const canLeave = computed(
-  () => game.tableId !== null && game.standings === null && !game.spectator,
-)
+const canLeave = computed(() => game.tableId !== null && game.standings === null && !game.spectator)
 
 async function leave() {
   const confirmed = window.confirm(
     'Quitter la partie ? Tu ne pourras pas y revenir : jusqu’à la fin, ' +
-    'le serveur jouera pour toi (check si possible, sinon couché).',
+      'le serveur jouera pour toi (check si possible, sinon couché).',
   )
   if (!confirmed) {
     return
@@ -174,7 +171,7 @@ async function leave() {
   leaving.value = true
   try {
     await game.leaveGame()
-    await router.push({name: 'lobby'})
+    await router.push({ name: 'lobby' })
   } catch (e) {
     game.error = e instanceof ApiError ? e.message : 'Impossible de quitter la partie.'
   } finally {
@@ -189,10 +186,58 @@ const gameOverTitle = computed(() =>
   game.endReason === 'ABANDONED' ? 'Partie abandonnée' : 'Partie terminée',
 )
 
+/** Après une partie locale, la télé repart vers la création d'une nouvelle partie */
+function newLocalGame() {
+  router.push({ name: 'local-host' })
+}
+
+// ------------------------------------------------------------------
+// Grand écran (la télé du mode local)
+
+/** Nombre de lignes d'historique sur la télé : lisibles de loin, donc peu nombreuses */
+const BIG_SCREEN_LOG_LINES = 6
+
+/** L'historique affiché : tout sur un ordinateur, seulement les dernières lignes sur la télé */
+const visibleLog = computed(() =>
+  game.bigScreen ? game.log.slice(0, BIG_SCREEN_LOG_LINES) : game.log,
+)
+
+/**
+ * Le navigateur sait-il passer en plein écran ? (pas tous : certains téléphones, et jsdom dans les tests)
+ * Une simple constante : la réponse ne change pas pendant la vie de la page.
+ */
+const canFullscreen = typeof document.documentElement.requestFullscreen === 'function'
+
+/** Vrai quand la page est en plein écran, tenu à jour par l'événement fullscreenchange */
+const fullscreen = ref(false)
+
+function onFullscreenChange() {
+  fullscreen.value = document.fullscreenElement !== null
+}
+
+onMounted(() => document.addEventListener('fullscreenchange', onFullscreenChange))
+onUnmounted(() => document.removeEventListener('fullscreenchange', onFullscreenChange))
+
+/**
+ * Passe en plein écran, ou en sort.
+ * Le navigateur ne l'accepte qu'après un geste de l'utilisateur (un clic) : impossible de le faire
+ * automatiquement à l'arrivée sur la page, d'où ce bouton.
+ */
+async function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen()
+    } else {
+      await document.documentElement.requestFullscreen()
+    }
+  } catch {
+    // Refusé par le navigateur : la page reste simplement comme elle est
+  }
+}
 </script>
 
 <template>
-  <main class="game">
+  <main class="game" :class="{ 'game--big': game.bigScreen }">
     <div v-if="loadError" class="error" role="alert">
       <p>{{ loadError }}</p>
       <button type="button" @click="backToLobby">Retour au lobby</button>
@@ -206,7 +251,18 @@ const gameOverTitle = computed(() =>
       <header class="game-header">
         <h1>{{ game.tableName || 'Table' }}</h1>
         <p>{{ game.handNumber > 0 ? `Main n°${game.handNumber}` : 'La partie va commencer…' }}</p>
-        <template v-if="game.spectator">
+        <!-- La télé : pas de badge ni de lien, seulement le plein écran -->
+        <template v-if="game.bigScreen">
+          <button
+            v-if="canFullscreen"
+            type="button"
+            class="fullscreen-button"
+            @click="toggleFullscreen"
+          >
+            {{ fullscreen ? 'Quitter le plein écran' : 'Plein écran' }}
+          </button>
+        </template>
+        <template v-else-if="game.spectator">
           <p class="spectator-badge">Mode spectateur</p>
           <RouterLink :to="{ name: 'lobby' }" class="back-link">Retour au lobby</RouterLink>
         </template>
@@ -229,7 +285,7 @@ const gameOverTitle = computed(() =>
           <div class="felt">
             <div class="center">
               <div class="board" aria-label="Cartes communes">
-                <PlayingCard v-for="card in game.board" :key="card" :card="card"/>
+                <PlayingCard v-for="card in game.board" :key="card" :card="card" />
                 <span
                   v-for="n in emptyBoardSlots"
                   :key="`slot-${n}`"
@@ -278,7 +334,7 @@ const gameOverTitle = computed(() =>
                   class="dealer-button"
                   title="Dealer"
                   aria-label="Dealer"
-                >D</span
+                  >D</span
                 >
               </p>
               <p v-if="isAbsent(seat.player)" class="seat-presence">
@@ -291,20 +347,14 @@ const gameOverTitle = computed(() =>
 
               <!-- Cartes : montrées au showdown, les miennes, ou le dos pour un adversaire en jeu -->
               <div v-if="seat.player.revealedCards" class="seat-cards">
-                <PlayingCard v-for="card in seat.player.revealedCards" :key="card" :card="card"/>
+                <PlayingCard v-for="card in seat.player.revealedCards" :key="card" :card="card" />
               </div>
-              <div
-                v-else-if="isMe(seat.player.name) && game.myCards.length > 0"
-                class="seat-cards"
-              >
-                <PlayingCard v-for="card in game.myCards" :key="card" :card="card"/>
+              <div v-else-if="isMe(seat.player.name) && game.myCards.length > 0" class="seat-cards">
+                <PlayingCard v-for="card in game.myCards" :key="card" :card="card" />
               </div>
-              <div
-                v-else-if="!isMe(seat.player.name) && isInHand(seat.player)"
-                class="seat-cards"
-              >
-                <PlayingCard hidden/>
-                <PlayingCard hidden/>
+              <div v-else-if="!isMe(seat.player.name) && isInHand(seat.player)" class="seat-cards">
+                <PlayingCard hidden />
+                <PlayingCard hidden />
               </div>
 
               <p v-if="seat.player.category" class="seat-status">{{ seat.player.category }}</p>
@@ -379,9 +429,9 @@ const gameOverTitle = computed(() =>
 
       <!-- Historique -->
       <section class="log-panel" aria-labelledby="log-title">
-        <h2 id="log-title">Historique</h2>
+        <h2 id="log-title">{{ game.bigScreen ? 'Dernières actions' : 'Historique' }}</h2>
         <ol class="log" aria-live="polite">
-          <li v-for="(line, index) in game.log" :key="index">{{ line }}</li>
+          <li v-for="(line, index) in visibleLog" :key="index">{{ line }}</li>
         </ol>
       </section>
     </div>
@@ -395,7 +445,8 @@ const gameOverTitle = computed(() =>
         aria-labelledby="game-over-title"
       >
         <h2 id="game-over-title">{{ gameOverTitle }}</h2>
-        <p v-if="game.endReason === 'ABANDONED'">
+        <p v-if="game.local">Partie locale : elle ne compte pas au classement.</p>
+        <p v-else-if="game.endReason === 'ABANDONED'">
           Trop de joueurs sont partis : cette partie ne compte pas au classement.
         </p>
         <ol>
@@ -403,7 +454,10 @@ const gameOverTitle = computed(() =>
             <strong>{{ standing.player }}</strong> : {{ standing.chips }} jetons
           </li>
         </ol>
-        <button type="button" class="primary" @click="backToLobby">Retour au lobby</button>
+        <button v-if="game.bigScreen" type="button" class="primary" @click="newLocalGame">
+          Nouvelle partie
+        </button>
+        <button v-else type="button" class="primary" @click="backToLobby">Retour au lobby</button>
       </div>
     </div>
   </main>
@@ -513,8 +567,9 @@ const gameOverTitle = computed(() =>
     var(--felt) 45%,
     var(--felt-dark) 100%
   );
-  box-shadow: inset 0 0 40px rgb(0 0 0 / 0.45),
-  0 12px 30px rgb(0 0 0 / 0.35);
+  box-shadow:
+    inset 0 0 40px rgb(0 0 0 / 0.45),
+    0 12px 30px rgb(0 0 0 / 0.35);
 }
 
 .center {
@@ -832,6 +887,72 @@ const gameOverTitle = computed(() =>
 .game-over-panel ol {
   margin: 0 0 var(--space-6);
   padding-left: var(--space-6);
+}
+
+/* ------------------------------------------------------------------
+   Grand écran : la télé du mode local, regardée depuis le canapé.
+   Pas de barre en haut (App.vue), donc toute la hauteur de l'écran.
+   Mêmes règles qu'au-dessus, avec des maximums bien plus grands :
+   les clamp(min, idéal, max) des places et des cartes plafonnaient à une taille d'ordinateur.
+   ------------------------------------------------------------------ */
+.game--big {
+  width: calc(100% - 2rem);
+  height: 100dvh;
+}
+
+/* Pas de barre d'actions : la table occupe toute la hauteur de la colonne de gauche */
+.game--big .game-layout {
+  grid-template-columns: minmax(0, 1fr) clamp(16rem, 22vw, 28rem);
+  grid-template-areas:
+    'table header'
+    'table log'
+    'table log';
+}
+
+.game--big .table-area {
+  padding: clamp(2.5rem, 9vh, 7rem) clamp(4rem, 6vw, 8rem);
+}
+
+.game--big .game-header h1 {
+  font-size: clamp(1.4rem, 2.4vw, 2.6rem);
+}
+
+.game--big .game-header p {
+  font-size: clamp(1rem, 1.5vw, 1.6rem);
+}
+
+.fullscreen-button {
+  margin-top: var(--space-2);
+}
+
+.game--big .center {
+  --card-w: clamp(2rem, 7.5cqw, 8rem);
+}
+
+.game--big .pot {
+  font-size: clamp(0.8rem, 2.2cqw, 2.2rem);
+}
+
+.game--big .pot strong {
+  font-size: clamp(1rem, 3.6cqw, 3.6rem);
+}
+
+.game--big .bet {
+  font-size: clamp(0.75rem, 2cqw, 2rem);
+}
+
+.game--big .seat {
+  width: clamp(6.5rem, 17cqw, 18rem);
+  font-size: clamp(0.75rem, 2.1cqw, 2.1rem);
+  --card-w: clamp(1.3rem, 3.4cqw, 3.6rem);
+}
+
+.game--big .log-panel h2 {
+  font-size: clamp(1.05rem, 1.5vw, 1.7rem);
+}
+
+.game--big .log {
+  font-size: clamp(0.875rem, 1.25vw, 1.4rem);
 }
 
 /* ------------------------------------------------------------------

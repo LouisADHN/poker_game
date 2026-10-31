@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
-import type { TableView } from '@/api/types'
+import type { GameState, TableView } from '@/api/types'
 import { useGameStore } from '@/stores/game'
 import GameTableView from '../GameTableView.vue'
 
@@ -20,11 +20,14 @@ const table: TableView = {
   ],
 }
 
+/** La table que renvoie le faux serveur : celle du lobby, sauf dans les tests du grand écran */
+let servedTable: TableView = table
+
 /** Faux fetch : la table pour le GET, 204 pour « Quitter la partie » */
 const fetchMock = vi.fn<typeof fetch>(async (input) =>
   String(input).endsWith('/leave-game')
     ? new Response(null, { status: 204 })
-    : Response.json(table),
+    : Response.json(servedTable),
 )
 
 /**
@@ -37,6 +40,7 @@ function testRouter(): Router {
     routes: [
       { path: '/', name: 'lobby', component: { template: '<p>Lobby</p>' } },
       { path: '/tables/:id', name: 'game', component: GameTableView },
+      { path: '/local', name: 'local-host', component: { template: '<p>Télé</p>' } },
     ],
   })
 }
@@ -56,6 +60,7 @@ async function mountTable() {
 
 describe('GameTableView', () => {
   beforeEach(() => {
+    servedTable = table
     fetchMock.mockClear()
     vi.stubGlobal('fetch', fetchMock)
   })
@@ -179,5 +184,119 @@ describe('GameTableView', () => {
     for (const seat of wrapper.findAll('.seat')) {
       expect(seat.findAll('.playing-card.back')).toHaveLength(2)
     }
+  })
+})
+
+// ------------------------------------------------------------------
+// Le grand écran : la télé du mode local
+
+/** Le GAME_STATE qu'un spectateur reçoit en pleine main */
+const spectatorState: GameState = {
+  seq: 3,
+  spectator: true,
+  table: {
+    handNumber: 1,
+    dealer: 'Alice',
+    street: 'PREFLOP',
+    board: [],
+    pot: 30,
+    players: [
+      {
+        name: 'Alice',
+        chips: 990,
+        streetBet: 10,
+        status: 'ACTIVE',
+        lastAction: null,
+        revealedCards: null,
+        category: null,
+      },
+      {
+        name: 'Bob',
+        chips: 980,
+        streetBet: 20,
+        status: 'ACTIVE',
+        lastAction: null,
+        revealedCards: null,
+        category: null,
+      },
+    ],
+  },
+  presences: { Alice: 'PRESENT', Bob: 'PRESENT' },
+  holeCards: [],
+  yourTurn: null,
+}
+
+describe('GameTableView en grand écran', () => {
+  beforeEach(() => {
+    servedTable = { ...table, local: true } // une table du mode local
+    fetchMock.mockClear()
+    vi.stubGlobal('fetch', fetchMock)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('la télé (spectatrice d’une table locale) passe en grand écran, sans badge ni lien', async () => {
+    const { wrapper, game } = await mountTable()
+
+    game.handle({ type: 'GAME_STATE', data: spectatorState })
+    await flushPromises()
+
+    expect(wrapper.find('main').classes()).toContain('game--big')
+    expect(wrapper.find('.spectator-badge').exists()).toBe(false)
+    expect(wrapper.find('.back-link').exists()).toBe(false)
+    expect(wrapper.find('#log-title').text()).toBe('Dernières actions')
+  })
+
+  it('n’affiche que les 6 dernières lignes d’historique, la plus récente en premier', async () => {
+    const { wrapper, game } = await mountTable()
+    game.handle({ type: 'GAME_STATE', data: spectatorState })
+
+    for (let amount = 1; amount <= 10; amount++) {
+      game.handle({ type: 'POT_WON', data: { player: 'Alice', amount } })
+    }
+    await flushPromises()
+
+    const lines = wrapper.findAll('.log li').map((li) => li.text())
+    expect(lines).toHaveLength(6)
+    expect(lines[0]).toBe('Alice remporte 10')
+  })
+
+  it('un JOUEUR d’une table locale garde l’affichage normal', async () => {
+    const { wrapper, game } = await mountTable()
+
+    game.handle({ type: 'GAME_STATE', data: { ...spectatorState, spectator: false } })
+    await flushPromises()
+
+    expect(wrapper.find('main').classes()).not.toContain('game--big')
+    expect(wrapper.find('.action-bar').exists()).toBe(true)
+  })
+
+  it('un spectateur d’une table du LOBBY garde l’affichage normal', async () => {
+    servedTable = table // table du lobby
+    const { wrapper, game } = await mountTable()
+
+    game.handle({ type: 'GAME_STATE', data: spectatorState })
+    await flushPromises()
+
+    expect(wrapper.find('main').classes()).not.toContain('game--big')
+    expect(wrapper.find('.spectator-badge').exists()).toBe(true)
+  })
+
+  it('en fin de partie, la télé propose une nouvelle partie locale', async () => {
+    const { wrapper, router, game } = await mountTable()
+    game.handle({ type: 'GAME_STATE', data: spectatorState })
+    game.handle({
+      type: 'GAME_OVER',
+      data: { reason: 'COMPLETED', standings: [{ player: 'Alice', chips: 2000 }] },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Partie locale : elle ne compte pas au classement.')
+    await wrapper.find('.game-over-panel button').trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('local-host')
   })
 })

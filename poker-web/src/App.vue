@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useGameStore } from '@/stores/game'
 import { useLobbyStore } from '@/stores/lobby'
 
 const auth = useAuthStore()
 const lobby = useLobbyStore()
+const game = useGameStore()
 const router = useRouter()
 const route = useRoute()
 
@@ -20,6 +22,12 @@ onMounted(async () => {
   }
 })
 
+/**
+ * Sur la télé, pendant une partie locale, pas de barre : tout l'écran est pour la table,
+ * et personne n'y clique (on regarde depuis le canapé).
+ */
+const hideAppBar = computed(() => route.name === 'game' && game.bigScreen)
+
 async function logout() {
   lobby.stopLive()
   auth.logout()
@@ -28,8 +36,8 @@ async function logout() {
 </script>
 
 <template>
-  <!-- Barre commune, affichée uniquement quand on est connecté -->
-  <header v-if="auth.user && auth.isAuthenticated()" class="app-bar">
+  <!-- Barre commune, affichée uniquement quand on est connecté (et pas sur la télé en partie) -->
+  <header v-if="auth.user && auth.isAuthenticated() && !hideAppBar" class="app-bar">
     <RouterLink :to="{ name: 'lobby' }" class="brand">Tapis vert</RouterLink>
 
     <nav aria-label="Navigation principale">

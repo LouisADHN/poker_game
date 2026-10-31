@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { api } from '@/api/http'
 import { connect, onEachConnection, publish, subscribe, type StompHeaders } from '@/api/stomp'
 import type {
@@ -125,6 +125,13 @@ export const useGameStore = defineStore('game', () => {
   const turnTimeoutMs = ref(DEFAULT_TURN_TIMEOUT_MS)
   /** Vrai si je regarde la partie sans y jouer (indiqué par le serveur dans GAME_STATE) */
   const spectator = ref(false)
+  /** Vrai pour une partie du mode local (une table sur un écran partagé) */
+  const local = ref(false)
+  /**
+   * Vrai pour l'écran partagé du mode local : la télé regarde la table sans y jouer.
+   * computed : se recalcule tout seul quand spectator ou local change.
+   */
+  const bigScreen = computed(() => spectator.value && local.value)
   /** Historique de la partie, le plus récent en premier */
   const log = ref<string[]>([])
   /** Classement final, non null quand la partie est terminée */
@@ -172,6 +179,7 @@ export const useGameStore = defineStore('game', () => {
     turnDeadline.value = null
     turnTimeoutMs.value = DEFAULT_TURN_TIMEOUT_MS
     spectator.value = false
+    local.value = table.local
     lastSeq = 0
     syncPending = true
     log.value = []
@@ -478,6 +486,8 @@ export const useGameStore = defineStore('game', () => {
     turnDeadline,
     turnTimeoutMs,
     spectator,
+    local,
+    bigScreen,
     log,
     standings,
     endReason,
