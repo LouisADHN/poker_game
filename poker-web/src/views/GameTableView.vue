@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/auth'
 import { describePresence, useGameStore, type PlayerState } from '@/stores/game'
 import ActionBar from '@/components/ActionBar.vue'
 import LeaveGameButton from '@/components/LeaveGameButton.vue'
+import LocalController from '@/components/LocalController.vue'
 import PlayingCard from '@/components/PlayingCard.vue'
 
 const route = useRoute()
@@ -156,7 +157,15 @@ async function toggleFullscreen() {
 
     <p v-if="game.error" class="error" role="alert">{{ game.error }}</p>
 
-    <div class="game-layout">
+    <!--
+      Trois écrans pour une même partie :
+      - la manette : le téléphone d'un joueur d'une table locale (la table est sur la télé) ;
+      - sinon la table complète, sur ordinateur comme sur la télé (game--big).
+      La fin de partie, plus bas, est commune aux trois.
+    -->
+    <LocalController v-if="game.controller" />
+
+    <div v-else class="game-layout">
       <!-- Premier dans le code (le h1 reste le premier titre de la page),
            affiché en haut de la colonne de droite grâce à la grille -->
       <header class="game-header">

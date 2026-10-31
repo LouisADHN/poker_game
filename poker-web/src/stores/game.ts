@@ -125,6 +125,12 @@ export const useGameStore = defineStore('game', () => {
   const turnTimeoutMs = ref(DEFAULT_TURN_TIMEOUT_MS)
   /** Vrai si je regarde la partie sans y jouer (indiqué par le serveur dans GAME_STATE) */
   const spectator = ref(false)
+  /**
+   * Vrai dès le premier GAME_STATE reçu. Avant, spectator vaut false par défaut :
+   * on ne sait pas encore si je joue ou si je regarde (la télé se croirait une manette).
+   * Reste vrai pendant une reconnexion : qui je suis à cette table ne change pas.
+   */
+  const stateReceived = ref(false)
   /** Vrai pour une partie du mode local (une table sur un écran partagé) */
   const local = ref(false)
   /**
@@ -135,9 +141,10 @@ export const useGameStore = defineStore('game', () => {
   /**
    * Vrai pour la manette du mode local : le téléphone d'un joueur assis à une table locale.
    * La table est déjà dessinée sur la télé : le téléphone n'affiche que mes cartes et mes actions.
-   * C'est le cas exactement inverse du grand écran, pour une même table locale.
+   * C'est le cas inverse du grand écran, pour une même table locale, mais seulement une fois
+   * l'état reçu (bigScreen n'en a pas besoin : spectator ne passe à true qu'avec GAME_STATE).
    */
-  const controller = computed(() => local.value && !spectator.value)
+  const controller = computed(() => local.value && stateReceived.value && !spectator.value)
   /** Historique de la partie, le plus récent en premier */
   const log = ref<string[]>([])
   /** Classement final, non null quand la partie est terminée */
@@ -185,6 +192,7 @@ export const useGameStore = defineStore('game', () => {
     turnDeadline.value = null
     turnTimeoutMs.value = DEFAULT_TURN_TIMEOUT_MS
     spectator.value = false
+    stateReceived.value = false
     local.value = table.local
     lastSeq = 0
     syncPending = true
@@ -293,6 +301,7 @@ export const useGameStore = defineStore('game', () => {
   function applyState(state: GameState): void {
     const { table } = state
     spectator.value = state.spectator
+    stateReceived.value = true
     handNumber.value = table.handNumber
     dealer.value = table.dealer
     board.value = table.board
@@ -492,6 +501,7 @@ export const useGameStore = defineStore('game', () => {
     turnDeadline,
     turnTimeoutMs,
     spectator,
+    stateReceived,
     local,
     bigScreen,
     controller,

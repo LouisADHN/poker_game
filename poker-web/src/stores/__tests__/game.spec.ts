@@ -119,6 +119,15 @@ describe('useGameStore', () => {
     },
   )
 
+  it('avant le premier GAME_STATE, une table locale n’est ni manette ni grand écran', () => {
+    const game = useGameStore()
+    game.start({ ...table, local: true })
+
+    // On ne sait pas encore si on joue ou si on regarde : la télé ne doit pas se croire manette
+    expect(game.controller).toBe(false)
+    expect(game.bigScreen).toBe(false)
+  })
+
   it('commence avec tous les joueurs présents', () => {
     const game = startedStore()
     expect(game.players.map((p) => p.presence)).toEqual(['PRESENT', 'PRESENT'])

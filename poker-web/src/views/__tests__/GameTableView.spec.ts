@@ -281,14 +281,47 @@ describe('GameTableView en grand écran', () => {
     expect(lines[0]).toBe('Alice remporte 10')
   })
 
-  it('un JOUEUR d’une table locale garde l’affichage normal', async () => {
+  it('un JOUEUR d’une table locale a la manette : ni table dessinée, ni grand écran', async () => {
     const { wrapper, game } = await mountTable()
 
     game.handle({ type: 'GAME_STATE', data: { ...spectatorState, spectator: false } })
     await flushPromises()
 
+    expect(wrapper.find('.controller').exists()).toBe(true)
+    expect(wrapper.find('.poker-table').exists()).toBe(false)
     expect(wrapper.find('main').classes()).not.toContain('game--big')
     expect(wrapper.find('.action-bar').exists()).toBe(true)
+  })
+
+  it('avant le premier GAME_STATE, une table locale affiche la table, pas la manette', async () => {
+    const { wrapper } = await mountTable()
+
+    expect(wrapper.find('.controller').exists()).toBe(false)
+    expect(wrapper.find('.poker-table').exists()).toBe(true)
+  })
+
+  it('un joueur d’une table du LOBBY garde la table complète', async () => {
+    servedTable = table // table du lobby
+    const { wrapper, game } = await mountTable()
+
+    game.handle({ type: 'GAME_STATE', data: { ...spectatorState, spectator: false } })
+    await flushPromises()
+
+    expect(wrapper.find('.controller').exists()).toBe(false)
+    expect(wrapper.find('.poker-table').exists()).toBe(true)
+  })
+
+  it('la fin de partie s’affiche aussi par-dessus la manette', async () => {
+    const { wrapper, game } = await mountTable()
+    game.handle({ type: 'GAME_STATE', data: { ...spectatorState, spectator: false } })
+    game.handle({
+      type: 'GAME_OVER',
+      data: { reason: 'COMPLETED', standings: [{ player: 'Alice', chips: 2000 }] },
+    })
+    await flushPromises()
+
+    expect(wrapper.find('#game-over-title').text()).toBe('Partie terminée')
+    expect(wrapper.text()).toContain('Partie locale : elle ne compte pas au classement.')
   })
 
   it('un spectateur d’une table du LOBBY garde l’affichage normal', async () => {
