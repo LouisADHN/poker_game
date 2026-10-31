@@ -41,6 +41,7 @@ function testRouter(): Router {
       { path: '/', name: 'lobby', component: { template: '<p>Lobby</p>' } },
       { path: '/tables/:id', name: 'game', component: GameTableView },
       { path: '/local', name: 'local-host', component: { template: '<p>Télé</p>' } },
+      { path: '/join/:code?', name: 'join', component: { template: '<p>Rejoindre</p>' } },
     ],
   })
 }
@@ -66,6 +67,7 @@ describe('GameTableView', () => {
   })
 
   afterEach(() => {
+    localStorage.clear()
     vi.unstubAllGlobals()
   })
 
@@ -95,6 +97,22 @@ describe('GameTableView', () => {
       expect.objectContaining({ method: 'POST' }),
     )
     expect(router.currentRoute.value.name).toBe('lobby')
+  })
+
+  it('un invité qui quitte la partie est déconnecté et renvoyé vers /join', async () => {
+    localStorage.setItem('poker.token', 'jeton-invite')
+    localStorage.setItem('poker.expiresAt', new Date(Date.now() + 3_600_000).toISOString())
+    localStorage.setItem('poker.user', JSON.stringify({ id: -42, username: 'Mamie' }))
+    localStorage.setItem('poker.localSeat', '7')
+    vi.stubGlobal('confirm', () => true)
+    const { wrapper, router } = await mountTable()
+
+    await wrapper.find('.leave-button').trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('join')
+    expect(localStorage.getItem('poker.token')).toBeNull()
+    expect(localStorage.getItem('poker.localSeat')).toBeNull()
   })
 
   it('ne fait rien si le joueur annule', async () => {

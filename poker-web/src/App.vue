@@ -29,18 +29,22 @@ onMounted(async () => {
 const hideAppBar = computed(() => route.name === 'game' && game.bigScreen)
 
 async function logout() {
+  const wasGuest = auth.isGuest // à lire AVANT logout(), qui efface l'utilisateur
   lobby.stopLive()
   auth.logout()
-  await router.push({ name: 'login' })
+  await router.push({ name: wasGuest ? 'join' : 'login' })
 }
 </script>
 
 <template>
   <!-- Barre commune, affichée uniquement quand on est connecté (et pas sur la télé en partie) -->
   <header v-if="auth.user && auth.isAuthenticated() && !hideAppBar" class="app-bar">
-    <RouterLink :to="{ name: 'lobby' }" class="brand">Tapis vert</RouterLink>
+    <RouterLink :to="{ name: auth.isGuest ? 'join' : 'lobby' }" class="brand"
+      >Tapis vert</RouterLink
+    >
 
-    <nav aria-label="Navigation principale">
+    <!-- Un invité n'a accès à aucune de ces pages : pas de navigation pour lui -->
+    <nav v-if="!auth.isGuest" aria-label="Navigation principale">
       <!-- RouterLink ajoute aria-current="page" sur le lien de la page affichée -->
       <RouterLink :to="{ name: 'lobby' }">Tables</RouterLink>
       <RouterLink :to="{ name: 'local-host' }">Partie locale</RouterLink>
@@ -49,7 +53,11 @@ async function logout() {
 
     <div class="account">
       <span>{{ auth.user.username }}</span>
-      <button type="button" @click="logout">Se déconnecter</button>
+      <!--
+        Pas de bouton pour un invité : se déconnecter le laisserait assis à la table, sans moyen
+        d'y revenir. Il part avec « Quitter la table » ou « Quitter la partie », qui le libèrent aussi.
+      -->
+      <button v-if="!auth.isGuest" type="button" @click="logout">Se déconnecter</button>
     </div>
   </header>
 

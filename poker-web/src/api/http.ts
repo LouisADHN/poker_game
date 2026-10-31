@@ -26,6 +26,12 @@ export class ApiError extends Error {
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
   body?: unknown
+  /**
+   * Vrai pour appeler le serveur SANS le jeton, même si on en a un.
+   * Sert à la route qui crée un invité : un vieux jeton expiré y provoquerait un 401,
+   * car le serveur vérifie tout jeton présent, même sur une route publique.
+   */
+  anonymous?: boolean
 }
 
 /**
@@ -41,7 +47,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json'
   }
-  if (auth.token) {
+  if (auth.token && !options.anonymous) {
     headers['Authorization'] = `Bearer ${auth.token}`
   }
 
@@ -54,9 +60,11 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   if (!response.ok) {
     // On avait un jeton mais le serveur le refuse : il a expiré. Retour à la connexion.
     // (Sans jeton, un 401 est une simple erreur de connexion : mauvais mot de passe.)
-    if (response.status === 401 && auth.token) {
+    if (response.status === 401 && headers['Authorization']) {
+      const wasGuest = auth.isGuest // à lire AVANT logout(), qui efface l'utilisateur
       auth.logout()
-      await router.push({ name: 'login' })
+      // Un invité n'a pas de mot de passe : il retourne à la page pour rejoindre une partie
+      await router.push({ name: wasGuest ? 'join' : 'login' })
     }
 
     let problem: ProblemDetail = { status: response.status }

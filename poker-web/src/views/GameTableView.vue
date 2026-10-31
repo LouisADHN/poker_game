@@ -5,6 +5,7 @@ import { api, ApiError } from '@/api/http'
 import type { ActionType, TableView } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { describePresence, useGameStore, type PlayerState } from '@/stores/game'
+import { useLocalPlayerStore } from '@/stores/localPlayer'
 import PlayingCard from '@/components/PlayingCard.vue'
 
 const route = useRoute()
@@ -171,7 +172,15 @@ async function leave() {
   leaving.value = true
   try {
     await game.leaveGame()
-    await router.push({ name: 'lobby' })
+    if (auth.isGuest) {
+      // Un invité n'existe que pour cette partie : il l'a quittée, on oublie tout.
+      // Sinon, la page /join retrouverait sa table (toujours en cours) et le renverrait ici !
+      useLocalPlayerStore().forget()
+      auth.logout()
+      await router.push({ name: 'join' })
+    } else {
+      await router.push({ name: 'lobby' })
+    }
   } catch (e) {
     game.error = e instanceof ApiError ? e.message : 'Impossible de quitter la partie.'
   } finally {

@@ -17,6 +17,15 @@ export interface LoginResponse {
   user: User
 }
 
+/**
+ * GuestJoinResponse côté serveur : un invité vient de s'asseoir à une table locale.
+ * « extends » : tous les champs de LoginResponse (jeton, expiration, utilisateur), plus la table.
+ * Un invité se range donc exactement comme un compte connecté.
+ */
+export interface GuestJoinResponse extends LoginResponse {
+  table: TableView
+}
+
 /** Erreur renvoyée par l'ApiExceptionHandler (format Problem Details). */
 export interface ProblemDetail {
   status: number
@@ -195,9 +204,9 @@ export type GameMessage =
   | { type: 'HOLE_CARDS'; data: { player: string; cards: string[] } }
   | { type: 'BOARD'; data: { street: Street; board: string[] } }
   | {
-  type: 'PLAYER_ACTED'
-  data: { player: string; action: ActionPayload; streetBet: number; chipsLeft: number }
-}
+      type: 'PLAYER_ACTED'
+      data: { player: string; action: ActionPayload; streetBet: number; chipsLeft: number }
+    }
   | { type: 'HAND_REVEALED'; data: { player: string; cards: string[]; category: string } }
   | { type: 'POT_WON'; data: { player: string; amount: number } }
   | { type: 'HAND_ENDED'; data: { handNumber: number } }

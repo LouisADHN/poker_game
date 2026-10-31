@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { disconnect } from '@/api/stomp'
 import type { LoginResponse, User } from '@/api/types'
 import { api, ApiError } from '@/api/http'
@@ -16,6 +16,13 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem(TOKEN_KEY))
   const expiresAt = ref<string | null>(localStorage.getItem(EXPIRES_KEY))
   const user = ref<User | null>(readStoredUser())
+
+  /**
+   * Vrai pour un invité du mode local. Le serveur donne aux invités un identifiant NÉGATIF
+   * (les comptes ont des identifiants positifs) : c'est ce qui les distingue.
+   * computed et pas fonction : ici, rien ne dépend de l'heure, seulement de user.
+   */
+  const isGuest = computed(() => user.value !== null && user.value.id < 0)
 
   /**
    * Vrai si un jeton existe et n'a pas expiré.
@@ -55,7 +62,17 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem(USER_KEY)
   }
 
+  /**
+   * Enregistre une nouvelle session : celle d'un compte (connexion) ou d'un invité (mode local).
+   *
+   * Si une session existait déjà (un invité qui se connecte ensuite à son compte…),
+   * on ferme d'abord la connexion WebSocket : elle a été ouverte avec l'ANCIEN jeton,
+   * et le serveur continuerait de nous prendre pour l'ancien utilisateur.
+   */
   function saveSession(response: LoginResponse): void {
+    if (token.value !== null) {
+      void disconnect() // « void » : on n'attend pas la fermeture, la nouvelle connexion peut s'ouvrir tout de suite
+    }
     token.value = response.token
     expiresAt.value = response.expiresAt
     user.value = response.user
@@ -66,7 +83,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   /** Vérifie auprès du serveur que le compte existe toujours ; sinon, déconnecte. */
   async function verifySession(): Promise<void> {
-    if (!isAuthenticated()) {
+    // Un invité n'a pas de compte à vérifier (et /api/users/me lui est interdit)
+    if (!isAuthenticated() || isGuest.value) {
       return
     }
     try {
@@ -80,7 +98,17 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { token, user, isAuthenticated, login, register, logout, verifySession }
+  return {
+    token,
+    user,
+    isGuest,
+    isAuthenticated,
+    login,
+    register,
+    logout,
+    saveSession,
+    verifySession,
+  }
 })
 
 function readStoredUser(): User | null {
