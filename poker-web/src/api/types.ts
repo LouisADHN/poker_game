@@ -53,7 +53,16 @@ export interface TableView {
   settings: TableSettings
   ownerId: number
   status: TableStatus
+  /** Vrai pour une table du mode local (écran partagé). Son code d'accès n'est jamais ici. */
+  local: boolean
   players: Seat[]
+}
+
+/** LocalTable côté serveur : une table locale qui vient d'être créée, et son code d'accès. */
+export interface LocalTable {
+  table: TableView
+  /** 6 caractères, ex : "K7QM2X". Seul l'hôte le reçoit. */
+  joinCode: string
 }
 
 /** CreateTableRequest côté serveur : les paramètres à plat, plus le nom. */

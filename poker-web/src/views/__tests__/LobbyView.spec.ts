@@ -18,6 +18,7 @@ function table(
     settings: { smallBlind: 10, bigBlind: 20, startingChips: 1000, maxPlayers: 6 },
     ownerId: playerIds[0]!,
     status,
+    local: false,
     players: playerIds.map((userId) => ({ userId, username: `Joueur ${userId}` })),
   }
 }

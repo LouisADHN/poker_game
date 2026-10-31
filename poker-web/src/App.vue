@@ -35,6 +35,7 @@ async function logout() {
     <nav aria-label="Navigation principale">
       <!-- RouterLink ajoute aria-current="page" sur le lien de la page affichée -->
       <RouterLink :to="{ name: 'lobby' }">Tables</RouterLink>
+      <RouterLink :to="{ name: 'local-host' }">Partie locale</RouterLink>
       <RouterLink :to="{ name: 'leaderboard' }">Classement</RouterLink>
     </nav>
 

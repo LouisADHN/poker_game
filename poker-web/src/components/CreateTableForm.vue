@@ -1,9 +1,18 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { ApiError } from '@/api/http'
+import type { CreateTableRequest } from '@/api/types'
 import { useLobbyStore } from '@/stores/lobby'
 
-// 1. Le store du lobby : c'est lui qui appelle le serveur
+/**
+ * Le même formulaire sert au lobby et au mode local : seul ce qu'on fait des paramètres change.
+ * Le « ? » rend la prop facultative : sans elle, on crée une table du lobby.
+ */
+const props = defineProps<{
+  create?: (request: CreateTableRequest) => Promise<void>
+}>()
+
+// 1. Le store du lobby : c'est lui qui appelle le serveur (si on ne nous a pas donné d'autre fonction)
 const lobby = useLobbyStore()
 
 // Les champs du formulaire, avec des valeurs par défaut (type déduit : number)
@@ -27,13 +36,18 @@ async function submit() {
   try {
     // L'objet doit correspondre exactement à l'interface CreateTableRequest :
     // un champ oublié ou mal orthographié est souligné en rouge par TypeScript
-    await lobby.create({
+    const request: CreateTableRequest = {
       name: name.value,
       smallBlind: smallBlind.value,
       bigBlind: bigBlind.value,
       startingChips: startingChips.value,
       maxPlayers: maxPlayers.value,
-    })
+    }
+    if (props.create) {
+      await props.create(request)
+    } else {
+      await lobby.create(request)
+    }
     // Rien d'autre à faire : la page du lobby affiche la nouvelle table
     // et masque ce formulaire automatiquement
   } catch (e) {

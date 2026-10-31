@@ -52,6 +52,7 @@ const table: TableView = {
   settings: { smallBlind: 10, bigBlind: 20, startingChips: 1000, maxPlayers: 2 },
   ownerId: 1,
   status: 'PLAYING',
+  local: false,
   players: [
     { userId: 1, username: 'Alice' },
     { userId: 2, username: 'Bob' },

@@ -40,6 +40,13 @@ const router = createRouter({
       meta: { requiresAuth: true, title: 'Partie en cours' },
     },
     {
+      // L'écran partagé du mode local (la télé) : créer la partie, afficher le code, lancer
+      path: '/local',
+      name: 'local-host',
+      component: () => import('@/views/LocalHostView.vue'),
+      meta: { requiresAuth: true, title: 'Partie locale' },
+    },
+    {
       path: '/leaderboard',
       name: 'leaderboard',
       component: () => import('@/views/LeaderboardView.vue'),
