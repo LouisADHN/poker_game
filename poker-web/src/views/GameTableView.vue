@@ -5,8 +5,8 @@ import { api, ApiError } from '@/api/http'
 import type { TableView } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { describePresence, useGameStore, type PlayerState } from '@/stores/game'
-import { useLocalPlayerStore } from '@/stores/localPlayer'
 import ActionBar from '@/components/ActionBar.vue'
+import LeaveGameButton from '@/components/LeaveGameButton.vue'
 import PlayingCard from '@/components/PlayingCard.vue'
 
 const route = useRoute()
@@ -88,43 +88,6 @@ function statusText(player: PlayerState): string | null {
 
 function backToLobby() {
   router.push({ name: 'lobby' })
-}
-
-// ------------------------------------------------------------------
-// Quitter la partie
-
-/** Vrai pendant l'envoi de la demande : le bouton est désactivé, pas de double envoi */
-const leaving = ref(false)
-
-/** Le bouton n'a de sens que pendant la partie : une fois la table chargée, et avant la fin */
-const canLeave = computed(() => game.tableId !== null && game.standings === null && !game.spectator)
-
-async function leave() {
-  const confirmed = window.confirm(
-    'Quitter la partie ? Tu ne pourras pas y revenir : jusqu’à la fin, ' +
-      'le serveur jouera pour toi (check si possible, sinon couché).',
-  )
-  if (!confirmed) {
-    return
-  }
-
-  leaving.value = true
-  try {
-    await game.leaveGame()
-    if (auth.isGuest) {
-      // Un invité n'existe que pour cette partie : il l'a quittée, on oublie tout.
-      // Sinon, la page /join retrouverait sa table (toujours en cours) et le renverrait ici !
-      useLocalPlayerStore().forget()
-      auth.logout()
-      await router.push({ name: 'join' })
-    } else {
-      await router.push({ name: 'lobby' })
-    }
-  } catch (e) {
-    game.error = e instanceof ApiError ? e.message : 'Impossible de quitter la partie.'
-  } finally {
-    leaving.value = false
-  }
 }
 
 // ------------------------------------------------------------------
@@ -214,15 +177,8 @@ async function toggleFullscreen() {
           <p class="spectator-badge">Mode spectateur</p>
           <RouterLink :to="{ name: 'lobby' }" class="back-link">Retour au lobby</RouterLink>
         </template>
-        <button
-          v-if="canLeave"
-          type="button"
-          class="leave-button"
-          :disabled="leaving"
-          @click="leave"
-        >
-          {{ leaving ? 'Départ…' : 'Quitter la partie' }}
-        </button>
+        <!-- Ne s'affiche que pour un joueur, pendant la partie (le composant le décide) -->
+        <LeaveGameButton />
       </header>
 
       <!-- La table -->
