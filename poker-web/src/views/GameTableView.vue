@@ -149,7 +149,7 @@ async function toggleFullscreen() {
 </script>
 
 <template>
-  <main class="game" :class="{ 'game--big': game.bigScreen }">
+  <main class="game" :class="{ 'game--big': game.bigScreen, 'game--controller': game.controller }">
     <div v-if="loadError" class="error" role="alert">
       <p>{{ loadError }}</p>
       <button type="button" @click="backToLobby">Retour au lobby</button>
@@ -336,6 +336,18 @@ async function toggleFullscreen() {
   width: min(100% - 2rem, 90rem);
   height: calc(100dvh - var(--app-bar-height));
   padding-block: var(--space-3);
+}
+
+/*
+  La manette : la page fait AU MOINS la hauteur de l'écran (elle peut défiler au-delà),
+  et la manette (flex: 1) remplit l'espace : sa barre d'actions descend tout en bas.
+  ".game.game--controller" (deux classes) l'emporte sur ".game" seul, y compris sur
+  la règle "display: block" du téléphone plus bas.
+*/
+.game.game--controller {
+  display: flex;
+  height: auto;
+  min-height: calc(100dvh - var(--app-bar-height));
 }
 
 .game-layout {

@@ -95,22 +95,30 @@ const toCall = computed<number | null>(() => {
       </div>
     </dl>
 
-    <!-- class="controller-actions" s'ajoute à celles de l'élément racine du composant -->
-    <ActionBar class="controller-actions" />
+    <!--
+      big : la grande version de la barre (gros boutons).
+      class="controller-actions" s'ajoute à celles de l'élément racine du composant.
+    -->
+    <ActionBar big class="controller-actions" />
   </div>
 </template>
 
 <style scoped>
 /*
   Une colonne, centrée, pensée pour un téléphone tenu en portrait.
-  Les actions restent collées en bas de l'écran : on joue avec le pouce.
+  flex: 1 : la manette remplit la hauteur de la page (voir .game--controller dans
+  GameTableView), et la barre d'actions (margin-top: auto) descend tout en bas, sous le pouce.
+  Sur un écran large (un joueur sur ordinateur), elle reste à une largeur de téléphone.
 */
 .controller {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-4);
-  min-height: 100%;
+  width: 100%;
+  max-width: 32rem;
+  margin-inline: auto;
   padding-bottom: var(--space-4);
   text-align: center;
 }

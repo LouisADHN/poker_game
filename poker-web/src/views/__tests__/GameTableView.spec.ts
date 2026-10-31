@@ -290,6 +290,7 @@ describe('GameTableView en grand écran', () => {
     expect(wrapper.find('.controller').exists()).toBe(true)
     expect(wrapper.find('.poker-table').exists()).toBe(false)
     expect(wrapper.find('main').classes()).not.toContain('game--big')
+    expect(wrapper.find('main').classes()).toContain('game--controller')
     expect(wrapper.find('.action-bar').exists()).toBe(true)
   })
 
@@ -309,6 +310,7 @@ describe('GameTableView en grand écran', () => {
 
     expect(wrapper.find('.controller').exists()).toBe(false)
     expect(wrapper.find('.poker-table').exists()).toBe(true)
+    expect(wrapper.find('main').classes()).not.toContain('game--controller')
   })
 
   it('la fin de partie s’affiche aussi par-dessus la manette', async () => {

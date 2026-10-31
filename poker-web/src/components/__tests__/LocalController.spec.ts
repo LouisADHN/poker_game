@@ -185,13 +185,13 @@ describe('LocalController', () => {
     expect(number(wrapper, 'À suivre')).toBeNull()
   })
 
-  it('propose les actions et le bouton « Quitter la partie »', async () => {
+  it('propose les actions, en grande version, et le bouton « Quitter la partie »', async () => {
     const { wrapper, game } = await mountController()
 
     game.handle({ type: 'GAME_STATE', data: midHand() })
     await flushPromises()
 
-    expect(wrapper.find('.action-bar').exists()).toBe(true)
+    expect(wrapper.find('.action-bar').classes()).toContain('action-bar--big')
     expect(wrapper.find('.leave-button').exists()).toBe(true)
   })
 })

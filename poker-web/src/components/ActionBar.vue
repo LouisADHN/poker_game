@@ -7,9 +7,17 @@ import { useGameStore } from '@/stores/game'
  * La barre d'actions du joueur : le compte à rebours et les boutons quand c'est son tour,
  * un message d'attente sinon.
  *
- * Elle lit et modifie directement le store de la partie : son parent n'a rien à lui passer.
- * Le parent ne décide que deux choses : s'il l'affiche, et où il la place (grid-area…).
+ * Elle lit et modifie directement le store de la partie. Le parent ne décide que trois choses :
+ * s'il l'affiche, où il la place (grid-area…), et sa taille (prop big).
  */
+defineProps<{
+  /**
+   * Grande version, pour la manette du mode local : gros boutons sur deux colonnes,
+   * faciles à toucher avec le pouce. <ActionBar big /> suffit (Vue comprend big = true).
+   */
+  big?: boolean
+}>()
+
 const game = useGameStore()
 
 /** Montant choisi pour une mise ou une relance */
@@ -81,7 +89,7 @@ function raise() {
   <!-- La zone est toujours présente, pour que la mise en page ne saute pas -->
   <section
     class="action-bar"
-    :class="{ 'action-bar--active': game.turn }"
+    :class="{ 'action-bar--active': game.turn, 'action-bar--big': big }"
     aria-labelledby="actions-title"
   >
     <h2 id="actions-title" class="visually-hidden">Mes actions</h2>
@@ -133,7 +141,9 @@ function raise() {
           </button>
         </div>
 
-        <button type="button" @click="play('ALL_IN')">Tapis ({{ game.turn.chips }})</button>
+        <button type="button" class="all-in-button" @click="play('ALL_IN')">
+          Tapis ({{ game.turn.chips }})
+        </button>
       </div>
     </template>
 
@@ -221,5 +231,74 @@ function raise() {
 
 .raise input[type='number'] {
   width: 5.5rem;
+}
+
+/* ------------------------------------------------------------------
+   Grande version (prop big) : la manette du mode local, tenue en portrait.
+     ┌───────────────────────────┐
+     │ ▔▔▔▔▔▔▔▔▔ jauge ▔▔▔▔▔▔▔▔▔ │
+     │          À toi 21 s       │
+     │ [ Se coucher ][ Suivre 40]│
+     │ [====curseur====][ 100 ]  │
+     │ [     Relancer à 100    ] │
+     │ [      Tapis (480)      ] │
+     └───────────────────────────┘
+   Placée APRÈS les règles normales : à force égale, c'est la dernière règle qui gagne.
+   ------------------------------------------------------------------ */
+.action-bar--big {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.action-bar--big .timer {
+  height: 6px;
+}
+
+.action-bar--big .turn-title {
+  font-size: 1.5rem;
+  text-align: center;
+}
+
+.action-bar--big .waiting {
+  padding-block: var(--space-4);
+  font-size: 1.1rem;
+  text-align: center;
+}
+
+/* Deux colonnes égales ; ce qui doit prendre toute la largeur le dit avec grid-column */
+.action-bar--big .actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+/* 3.5rem = 56px de haut : bien au-dessus des 44px conseillés pour un doigt */
+.action-bar--big button,
+.action-bar--big input[type='number'] {
+  min-height: 3.5rem;
+  font-size: 1.15rem;
+}
+
+/* La relance occupe toute la largeur : le curseur, son montant, puis le bouton en dessous */
+.action-bar--big .raise {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6rem;
+  gap: var(--space-2);
+}
+
+.action-bar--big .raise input[type='range'] {
+  width: 100%;
+  min-height: 2.75rem; /* une zone de toucher assez haute autour du curseur */
+}
+
+.action-bar--big .raise input[type='number'] {
+  width: 100%;
+}
+
+.action-bar--big .raise-button,
+.action-bar--big .all-in-button {
+  grid-column: 1 / -1;
 }
 </style>

@@ -42,13 +42,16 @@ const yourTurn: YourTurn = {
   turnTimeoutMs: 30_000,
 }
 
-/** Le store prêt pour la table 7 (sans jeton : aucune connexion), et la barre affichée. */
-function mountBar() {
+/**
+ * Le store prêt pour la table 7 (sans jeton : aucune connexion), et la barre affichée.
+ * props : les paramètres du composant, par exemple { big: true }.
+ */
+function mountBar(props: { big?: boolean } = {}) {
   const pinia = createPinia()
   setActivePinia(pinia)
   const game = useGameStore()
   game.start(table)
-  const wrapper = mount(ActionBar, { global: { plugins: [pinia] } })
+  const wrapper = mount(ActionBar, { props, global: { plugins: [pinia] } })
   return { wrapper, game }
 }
 
@@ -182,5 +185,21 @@ describe('ActionBar', () => {
     await vi.advanceTimersByTimeAsync(5_000)
 
     expect(wrapper.find('.seconds').text()).toBe('25 s')
+  })
+
+  it('par défaut, la version normale (ordinateur)', () => {
+    const { wrapper } = mountBar()
+
+    expect(wrapper.find('.action-bar').classes()).not.toContain('action-bar--big')
+  })
+
+  it('avec big, la grande version (manette), qui fonctionne pareil', async () => {
+    const { wrapper, game } = mountBar({ big: true })
+    game.handle({ type: 'YOUR_TURN', data: yourTurn })
+    await flushPromises()
+
+    expect(wrapper.find('.action-bar').classes()).toContain('action-bar--big')
+    await button(wrapper, 'Checker').trigger('click')
+    expect(publish).toHaveBeenCalledWith('/app/tables/7/action', { type: 'CHECK' })
   })
 })
