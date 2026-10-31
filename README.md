@@ -54,6 +54,17 @@ Création de tables, parties multijoueurs synchronisées par WebSocket, statisti
 - Bouton **« Quitter la partie »** : le joueur est libéré tout de suite et peut rejoindre une autre table
 - Une partie qui n'a plus assez de joueurs présents est **abandonnée** et ne compte pas au classement
 
+**Spectateurs**
+- Regarder une partie en cours depuis le lobby, sans y jouer
+- Un spectateur ne reçoit **jamais** une carte privée : seulement l'état public de la table
+
+**Mode local : une télé et des téléphones**
+- Une table affichée **en grand sur un écran partagé** (télé, vidéoprojecteur), regardée depuis le canapé
+- Les joueurs rejoignent en **scannant un QR code** (ou en tapant un code de 6 caractères) et jouent depuis leur **téléphone**, qui devient une **manette** : leurs deux cartes en grand, leur tapis, le pot, ce qu'il faut pour suivre, et de gros boutons d'action
+- **Sans compte** : un simple pseudo suffit pour jouer en invité ; invités et comptes peuvent jouer à la même table
+- La télé est pilotée par un compte, qui crée la table et lance la partie sans s'y asseoir
+- Les parties locales **ne comptent jamais** au classement
+
 **Statistiques**
 - Classement général : victoires, taux de victoire, mains jouées et gagnées
 - Statistiques personnelles
@@ -168,6 +179,14 @@ La projection est testée **contre le vrai moteur**, sur des milliers d'événem
 - **Secrets hors du code** : clé JWT et mot de passe de la base fournis par variables d'environnement. En production, l'application refuse de démarrer si la clé est absente.
 - Conteneur exécuté **sans privilèges administrateur**, base de données jamais exposée sur Internet.
 
+### Mode local : des invités sans compte
+
+- Un invité reçoit un **vrai jeton JWT**, avec un identifiant **négatif** tiré au hasard (il ne peut jamais désigner un compte) et un claim `guest: true` qui lui donne le rôle **GUEST** au lieu de PLAYER. Rien n'est écrit en base.
+- Le rôle GUEST n'ouvre que le strict nécessaire : lire une table, la quitter, quitter la partie, et jouer par WebSocket. Tout le reste de l'API exige un compte.
+- L'invité est **assis avant** que son jeton soit créé : un code faux, une table pleine ou un pseudo déjà pris ne distribuent aucun jeton, donc aucun invité fantôme.
+- Le **code d'accès** (6 caractères, sans les caractères ambigus `0 O 1 I`) n'est donné qu'à l'hôte : il n'apparaît jamais dans les informations de table diffusées au lobby, et une table locale ne peut pas être rejointe par son numéro.
+- Côté navigateur, la même page de partie affiche trois écrans selon ce que le serveur dit de nous dans `GAME_STATE` : la table complète (ordinateur), le **grand écran** (spectateur d'une table locale : la télé) ou la **manette** (joueur d'une table locale). Tant que cet état n'est pas reçu, on ne sait pas si l'on joue ou si l'on regarde : la manette attend donc le premier `GAME_STATE`.
+
 ### Statistiques calculées, pas stockées
 
 Le serveur enregistre des **faits** (une ligne par partie et par participant, avec sa place finale), et les statistiques sont **calculées** par des requêtes SQL d'agrégation (`COUNT … FILTER`, `GROUP BY`). Il n'existe qu'une source de vérité, et une nouvelle statistique se résume à une nouvelle requête.
@@ -246,6 +265,26 @@ npm run dev
 
 Ouvrez **http://localhost:5173**. Vite relaie automatiquement les requêtes `/api` et `/ws` vers le serveur.
 
+### Tester le mode local avec un vrai téléphone
+
+Le téléphone et l'ordinateur doivent être sur le **même réseau Wi-Fi**.
+
+1. Lancez le serveur comme d'habitude (étape 1).
+2. Lancez le front en l'ouvrant au réseau local :
+
+   ```bash
+   cd poker-web
+   npm run dev -- --host
+   ```
+
+   Vite affiche alors une ligne `Network: http://192.168.x.x:5173/` : c'est l'adresse de l'ordinateur sur le réseau.
+3. Sur l'ordinateur (la « télé »), ouvrez **cette adresse réseau**, pas `localhost`, puis **Partie locale** : le QR code reprend l'adresse de la page, et `localhost` ne mènerait nulle part depuis le téléphone.
+4. Scannez le QR code avec le téléphone, entrez un pseudo, puis lancez la partie depuis la télé.
+
+Vite relaie aussi le WebSocket (`/ws`) : le téléphone passe par l'ordinateur, sans aucun réglage côté serveur.
+
+> Sous Windows, si le téléphone n'arrive pas à charger la page, autorisez Node.js dans le pare-feu pour les **réseaux privés** (Windows le demande au premier `--host`), et vérifiez que le Wi-Fi est bien déclaré comme réseau privé.
+
 ### Variante : tout en conteneurs, comme en production
 
 ```bash
@@ -278,6 +317,7 @@ Les tests couvrent notamment :
 - des **parties de bout en bout**, jouées par de vrais clients WebSocket, avec vérification que les cartes privées ne fuient pas ;
 - les **déconnexions** : délai de grâce, jeu automatique, abandon, joueur parti avant le lancement ;
 - la **reconnexion** : projection comparée au moteur, ordre des messages, photographie cohérente avec les numéros de séquence ;
+- les **spectateurs** et le **mode local** : aucune carte privée ne fuit, droits limités des invités, code d'accès jamais diffusé, choix de l'écran (table, télé ou manette) ;
 - les **statistiques**, calculées sur un jeu de parties construit à la main.
 
 ---
@@ -350,7 +390,8 @@ docker compose -f compose.deploy.yaml exec db pg_dump -U poker poker > sauvegard
 
 ### REST
 
-Toutes les routes sauf l'authentification exigent l'en-tête `Authorization: Bearer <jeton>`.
+Toutes les routes sauf l'authentification et l'arrivée d'un invité exigent l'en-tête `Authorization: Bearer <jeton>`.
+Un **invité** (mode local) n'a accès qu'à `GET /api/tables/{id}`, `POST /api/tables/{id}/leave` et `POST /api/tables/{id}/leave-game` ; les autres routes demandent un compte.
 
 | Méthode | Route | Rôle |
 |---|---|---|
@@ -366,6 +407,11 @@ Toutes les routes sauf l'authentification exigent l'en-tête `Authorization: Bea
 | `POST` | `/api/tables/{id}/leave` | Quitter une table |
 | `POST` | `/api/tables/{id}/start` | Lancer la partie (créateur uniquement) |
 | `POST` | `/api/tables/{id}/leave-game` | Quitter la partie en cours (le serveur joue pour le joueur jusqu'à la fin) |
+| `POST` | `/api/local` | Créer une table locale (l'hôte ne s'y assoit pas) ; `201` avec la table et son **code d'accès** |
+| `POST` | `/api/local/{code}/join` | Rejoindre une table locale avec son compte |
+| `POST` | `/api/local/{code}/guest` | Rejoindre en **invité**, **sans jeton** ; corps `{ "username": "..." }`, renvoie un jeton d'invité, son expiration, l'invité et la table |
+
+Une table locale se lance ensuite comme une autre (`POST /api/tables/{id}/start`, par l'hôte), et se joue par WebSocket.
 
 Les erreurs suivent le format standard **Problem Details** (RFC 9457).
 
@@ -400,11 +446,15 @@ Exemple d'action envoyée par le navigateur :
 
 - Les tables et les parties en cours vivent en mémoire : un redémarrage du serveur les interrompt.
 - Une seule instance du serveur (broker STOMP en mémoire).
+- Mode local :
+  - l'hôte ne peut pas fermer une table locale restée vide, et rien ne l'empêche d'en créer plusieurs ;
+  - la route qui fait entrer un invité est publique : on peut essayer des codes au hasard (environ un milliard de combinaisons, et seulement tant qu'une table attend des joueurs). Une limite de requêtes au niveau de Caddy la protégerait ;
+  - un invité peut prendre le pseudo d'un compte existant (cela ne se voit qu'à sa table).
 
 **Pistes d'évolution**
 
-- Spectateurs, discussion à la table
-- Mode « local » : un écran partagé affiche la table, les joueurs rejoignent par QR code et jouent depuis leur téléphone, avec ou sans compte
+- Discussion à la table
+- Afficher à qui c'est le tour sur la télé et pour les spectateurs
 - Historique détaillé des mains jouées
 - Déploiement continu automatique après chaque version validée
 

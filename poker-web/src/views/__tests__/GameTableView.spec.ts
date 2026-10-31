@@ -252,6 +252,7 @@ describe('GameTableView en grand écran', () => {
   })
 
   afterEach(() => {
+    localStorage.clear()
     vi.unstubAllGlobals()
   })
 
@@ -351,5 +352,51 @@ describe('GameTableView en grand écran', () => {
     await flushPromises()
 
     expect(router.currentRoute.value.name).toBe('local-host')
+  })
+
+  /** La partie locale se termine (je suis joueur, pas la télé) */
+  async function endLocalGameAsPlayer() {
+    const mounted = await mountTable()
+    mounted.game.handle({ type: 'GAME_STATE', data: { ...spectatorState, spectator: false } })
+    mounted.game.handle({
+      type: 'GAME_OVER',
+      data: { reason: 'COMPLETED', standings: [{ player: 'Alice', chips: 2000 }] },
+    })
+    await flushPromises()
+    return mounted
+  }
+
+  it('fin de partie locale pour un invité : « Terminer », déconnecté, renvoyé vers /join', async () => {
+    localStorage.setItem('poker.token', 'jeton-invite')
+    localStorage.setItem('poker.expiresAt', new Date(Date.now() + 3_600_000).toISOString())
+    localStorage.setItem('poker.user', JSON.stringify({ id: -42, username: 'Mamie' }))
+    localStorage.setItem('poker.localSeat', '7')
+    const { wrapper, router } = await endLocalGameAsPlayer()
+
+    const button = wrapper.find('.game-over-panel button')
+    expect(button.text()).toBe('Terminer')
+    await button.trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('join')
+    expect(localStorage.getItem('poker.token')).toBeNull()
+    expect(localStorage.getItem('poker.localSeat')).toBeNull()
+  })
+
+  it('fin de partie locale pour un compte : retour au lobby, toujours connecté', async () => {
+    localStorage.setItem('poker.token', 'jeton-alice')
+    localStorage.setItem('poker.expiresAt', new Date(Date.now() + 3_600_000).toISOString())
+    localStorage.setItem('poker.user', JSON.stringify({ id: 1, username: 'Alice' }))
+    localStorage.setItem('poker.localSeat', '7')
+    const { wrapper, router } = await endLocalGameAsPlayer()
+
+    const button = wrapper.find('.game-over-panel button')
+    expect(button.text()).toBe('Retour au lobby')
+    await button.trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('lobby')
+    expect(localStorage.getItem('poker.token')).toBe('jeton-alice')
+    expect(localStorage.getItem('poker.localSeat')).toBeNull()
   })
 })

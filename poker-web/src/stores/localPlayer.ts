@@ -107,6 +107,17 @@ export const useLocalPlayerStore = defineStore('localPlayer', () => {
       return
     }
     await api<void>(`/api/tables/${table.value.id}/leave`, { method: 'POST' })
+    endLocalSession()
+  }
+
+  /**
+   * Fin de mon passage à une table locale (je l'ai quittée, ou la partie est finie) :
+   * on oublie la table, et un invité est déconnecté, car il n'existait que pour elle.
+   * Un compte, lui, reste connecté.
+   * Un seul endroit pour cette règle : quitter avant le lancement, quitter en cours de partie
+   * et la fin de partie l'appellent tous les trois.
+   */
+  function endLocalSession(): void {
     forget()
     if (auth.isGuest) {
       auth.logout()
@@ -131,6 +142,7 @@ export const useLocalPlayerStore = defineStore('localPlayer', () => {
     joinWithAccount,
     resume,
     leave,
+    endLocalSession,
     stopLive,
     forget,
   }

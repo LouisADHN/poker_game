@@ -35,15 +35,11 @@ async function leave() {
   leaving.value = true
   try {
     await game.leaveGame()
-    if (auth.isGuest) {
-      // Un invité n'existe que pour cette partie : il l'a quittée, on oublie tout.
-      // Sinon, la page /join retrouverait sa table (toujours en cours) et le renverrait ici !
-      useLocalPlayerStore().forget()
-      auth.logout()
-      await router.push({ name: 'join' })
-    } else {
-      await router.push({ name: 'lobby' })
-    }
+    const wasGuest = auth.isGuest // à lire AVANT : endLocalSession déconnecte un invité
+    // On oublie la table locale : sinon la page /join la retrouverait (toujours en cours)
+    // et nous renverrait ici ! Un invité est aussi déconnecté : il n'existait que pour elle.
+    useLocalPlayerStore().endLocalSession()
+    await router.push({ name: wasGuest ? 'join' : 'lobby' })
   } catch (e) {
     game.error = e instanceof ApiError ? e.message : 'Impossible de quitter la partie.'
   } finally {

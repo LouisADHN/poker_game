@@ -56,6 +56,7 @@ describe('LeaveGameButton', () => {
   })
 
   afterEach(() => {
+    localStorage.clear()
     vi.unstubAllGlobals()
   })
 
@@ -105,5 +106,25 @@ describe('LeaveGameButton', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(router.currentRoute.value.name).toBe('lobby')
+  })
+
+  it('un compte qui quitte oublie aussi sa table locale, mais reste connecté', async () => {
+    localStorage.setItem('poker.token', 'jeton-alice')
+    localStorage.setItem('poker.expiresAt', new Date(Date.now() + 3_600_000).toISOString())
+    localStorage.setItem('poker.user', JSON.stringify({ id: 1, username: 'Alice' }))
+    // Sans ça, /join retrouverait la table (toujours en cours) et me renverrait sur la partie
+    localStorage.setItem('poker.localSeat', '7')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async () => new Response(null, { status: 204 })),
+    )
+    const { wrapper, router } = await mountButton()
+
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('lobby')
+    expect(localStorage.getItem('poker.localSeat')).toBeNull()
+    expect(localStorage.getItem('poker.token')).toBe('jeton-alice')
   })
 })

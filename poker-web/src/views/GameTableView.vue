@@ -5,6 +5,7 @@ import { api, ApiError } from '@/api/http'
 import type { TableView } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { describePresence, useGameStore, type PlayerState } from '@/stores/game'
+import { useLocalPlayerStore } from '@/stores/localPlayer'
 import ActionBar from '@/components/ActionBar.vue'
 import LeaveGameButton from '@/components/LeaveGameButton.vue'
 import LocalController from '@/components/LocalController.vue'
@@ -101,6 +102,19 @@ const gameOverTitle = computed(() =>
 /** Après une partie locale, la télé repart vers la création d'une nouvelle partie */
 function newLocalGame() {
   router.push({ name: 'local-host' })
+}
+
+/**
+ * Fin de partie, pour un joueur qui ferme la fenêtre du classement.
+ * Partie locale : on oublie la table, et un invité est déconnecté (il n'existait que pour elle).
+ * Puis un invité repart vers /join (le lobby lui est interdit), un compte vers le lobby.
+ */
+async function closeGame() {
+  const wasGuest = auth.isGuest // à lire AVANT : endLocalSession déconnecte un invité
+  if (game.local) {
+    useLocalPlayerStore().endLocalSession()
+  }
+  await router.push({ name: wasGuest ? 'join' : 'lobby' })
 }
 
 // ------------------------------------------------------------------
@@ -312,7 +326,9 @@ async function toggleFullscreen() {
         <button v-if="game.bigScreen" type="button" class="primary" @click="newLocalGame">
           Nouvelle partie
         </button>
-        <button v-else type="button" class="primary" @click="backToLobby">Retour au lobby</button>
+        <button v-else type="button" class="primary" @click="closeGame">
+          {{ auth.isGuest ? 'Terminer' : 'Retour au lobby' }}
+        </button>
       </div>
     </div>
   </main>

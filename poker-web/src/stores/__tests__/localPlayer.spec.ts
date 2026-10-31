@@ -153,4 +153,25 @@ describe('useLocalPlayerStore', () => {
     expect(player.table).toBeNull()
     expect(useAuthStore().token).toBeNull()
   })
+
+  it('fin de session : un invité oublie sa table ET est déconnecté', () => {
+    useAuthStore().saveSession({ token: 'jeton-invite', expiresAt: LATER, user: MAMIE })
+    localStorage.setItem('poker.localSeat', '7')
+
+    useLocalPlayerStore().endLocalSession()
+
+    expect(localStorage.getItem('poker.localSeat')).toBeNull()
+    expect(useAuthStore().token).toBeNull()
+  })
+
+  it('fin de session : un compte oublie sa table, mais reste connecté', () => {
+    const alice = { id: 1, username: 'Alice' }
+    useAuthStore().saveSession({ token: 'jeton-alice', expiresAt: LATER, user: alice })
+    localStorage.setItem('poker.localSeat', '7')
+
+    useLocalPlayerStore().endLocalSession()
+
+    expect(localStorage.getItem('poker.localSeat')).toBeNull()
+    expect(useAuthStore().token).toBe('jeton-alice')
+  })
 })
